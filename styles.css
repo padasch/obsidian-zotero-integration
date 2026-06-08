@@ -237,6 +237,76 @@
   }
 }
 
+.zt-monitor-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-3);
+  min-width: min(720px, 80vw);
+}
+
+.zt-monitor-modal h2,
+.zt-monitor-modal p {
+  margin: 0;
+}
+
+.zt-monitor-modal p {
+  color: var(--text-muted);
+}
+
+.zt-monitor-search {
+  width: 100%;
+}
+
+.zt-monitor-list {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.zt-monitor-empty {
+  color: var(--text-muted);
+  padding: var(--size-4-4);
+  text-align: center;
+}
+
+.zt-monitor-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--size-4-3);
+  padding: var(--size-4-3);
+}
+
+.zt-monitor-row + .zt-monitor-row {
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.zt-monitor-row-details {
+  min-width: 0;
+}
+
+.zt-monitor-row-title {
+  color: var(--text-normal);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zt-monitor-row-meta {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zt-monitor-buttons {
+  display: flex;
+  gap: var(--size-4-2);
+  justify-content: flex-end;
+}
+
 /* Confirmation Modal Styles */
 .confirmation-modal {
   padding: 1rem;

@@ -3,6 +3,7 @@ import { EditableFileView, Events, Plugin, TFile } from 'obsidian';
 import { shellPath } from 'shell-path';
 
 import { DataExplorerView, viewType } from './DataExplorerView';
+import { ZoteroMonitor } from './ZoteroMonitor';
 import { LoadingModal } from './bbt/LoadingModal';
 import { getCAYW } from './bbt/cayw';
 import { exportToMarkdown, renderCiteTemplate } from './bbt/export';
@@ -39,6 +40,16 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   citeSuggestTemplate: '[[{{citekey}}]]',
   openNoteAfterImport: false,
   whichNotesToOpenAfterImport: 'first-imported-note',
+  zoteroMonitorCheckOnStartup: false,
+  zoteroMonitorCollectionScope: [],
+  zoteroMonitorEnabled: false,
+  zoteroMonitorImportFormat: '',
+  zoteroMonitorIntervalMinutes: 0,
+  zoteroMonitorLibraryScope: [],
+  zoteroMonitorReadingStatusProperty: 'readingStatus',
+  zoteroMonitorReadingStatusValue: 'unread',
+  zoteroMonitorRecentDays: 30,
+  zoteroMonitorTagScope: [],
 };
 
 async function fixPath() {
@@ -66,10 +77,12 @@ export default class ZoteroConnector extends Plugin {
   settings: ZoteroConnectorSettings;
   emitter: Events;
   fuse: Fuse<CiteKeyExport>;
+  zoteroMonitor: ZoteroMonitor;
 
   async onload() {
     await this.loadSettings();
     this.emitter = new Events();
+    this.zoteroMonitor = new ZoteroMonitor(this);
 
     this.updatePDFUtility();
     this.addSettingTab(new ZoteroConnectorSettingsTab(this.app, this));
@@ -129,6 +142,14 @@ export default class ZoteroConnector extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: 'zdc-check-missing-literature',
+      name: 'Check Zotero for missing literature notes',
+      callback: () => {
+        this.zoteroMonitor.runManualCheck();
+      },
+    });
+
     this.registerEvent(
       this.app.vault.on('modify', (file) => {
         if (file instanceof TFile) {
@@ -139,10 +160,22 @@ export default class ZoteroConnector extends Plugin {
 
     app.workspace.trigger('parse-style-settings');
 
+    this.zoteroMonitor.schedule();
+    if (
+      this.settings.zoteroMonitorEnabled &&
+      this.settings.zoteroMonitorCheckOnStartup
+    ) {
+      this.app.workspace.onLayoutReady(() => {
+        this.zoteroMonitor.runAutomaticCheck();
+      });
+    }
+
     fixPath();
   }
 
   onunload() {
+    this.zoteroMonitor.clear();
+
     this.settings.citeFormats.forEach((f) => {
       this.removeFormatCommand(f);
     });
@@ -292,6 +325,7 @@ export default class ZoteroConnector extends Plugin {
 
   async saveSettings() {
     this.emitter.trigger('settingsUpdated');
+    this.zoteroMonitor?.schedule();
     await this.saveData(this.settings);
   }
 

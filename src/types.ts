@@ -1,3 +1,5 @@
+import type { TFile } from 'obsidian';
+
 export type Format =
   | 'latex'
   | 'biblatex'
@@ -65,6 +67,10 @@ export interface ExportToMarkdownParams {
   exportFormat: ExportFormat;
 }
 
+export interface ExportToMarkdownOptions {
+  afterWrite?: (file: TFile, item: any, markdownPath: string) => Promise<void>;
+}
+
 export interface RenderCiteTemplateParams {
   database: DatabaseWithPort;
   format: CitationFormat;
@@ -91,10 +97,45 @@ export interface ZoteroConnectorSettings {
   settingsVersion?: number;
   shouldConcat?: boolean;
   whichNotesToOpenAfterImport: NotesToOpenAfterImport;
+  zoteroMonitorCheckOnStartup: boolean;
+  zoteroMonitorCollectionScope: string[];
+  zoteroMonitorEnabled: boolean;
+  zoteroMonitorImportFormat: string;
+  zoteroMonitorIntervalMinutes: number;
+  zoteroMonitorLibraryScope: string[];
+  zoteroMonitorReadingStatusProperty: string;
+  zoteroMonitorReadingStatusValue: string;
+  zoteroMonitorRecentDays: number | null;
+  zoteroMonitorTagScope: string[];
 }
 
 export interface CiteKeyExport {
   libraryID: number;
+  libraryName?: string;
   citekey: string;
   title: string;
+}
+
+export interface ZoteroMonitorScope {
+  libraryScope: string[];
+  collectionScope: string[];
+  tagScope: string[];
+}
+
+export interface ZoteroMonitorMetadataSettings {
+  readingStatusProperty: string;
+  readingStatusValue: string;
+}
+
+export interface ZoteroMonitorItem {
+  citekey: string;
+  libraryID: number;
+  libraryName?: string;
+  itemKey?: string;
+  title: string;
+  dateAdded?: string;
+  dateModified?: string;
+  collections?: any[];
+  tags?: any[];
+  item: any;
 }

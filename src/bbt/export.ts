@@ -8,6 +8,7 @@ import { doesEXEExist, getVaultRoot } from '../helpers';
 import {
   DatabaseWithPort,
   ExportToMarkdownParams,
+  ExportToMarkdownOptions,
   RenderCiteTemplateParams,
   ZoteroConnectorSettings,
 } from '../types';
@@ -595,7 +596,8 @@ async function getTemplateData(
 
 export async function exportToMarkdown(
   params: ExportToMarkdownParams,
-  explicitCiteKeys?: CiteKey[]
+  explicitCiteKeys?: CiteKey[],
+  options?: ExportToMarkdownOptions
 ): Promise<string[]> {
   const importDate = moment();
   const { database, exportFormat, settings } = params;
@@ -825,11 +827,17 @@ export async function exportToMarkdown(
         
         if (shouldOverwrite) {
           await app.vault.modify(file, rendered);
+          if (options?.afterWrite) {
+            await options.afterWrite(file, item, markdownPath);
+          }
           createdOrUpdatedMarkdownFiles.push(markdownPath);
         }
       } else {
         await mkMDDir(markdownPath);
-        await app.vault.create(markdownPath, rendered);
+        const createdFile = await app.vault.create(markdownPath, rendered);
+        if (options?.afterWrite) {
+          await options.afterWrite(createdFile, item, markdownPath);
+        }
         createdOrUpdatedMarkdownFiles.push(markdownPath);
       }
     } catch (e) {
