@@ -4,12 +4,10 @@ import AsyncSelect from 'react-select/async';
 
 import { ExportFormat } from '../types';
 import { Icon } from './Icon';
+import { VaultPathSuggestInput } from './VaultPathSuggestInput';
 import { cslListRaw } from './cslList';
 import {
-  NoFileOptionMessage,
   NoOptionMessage,
-  buildFileSearch,
-  buildLoadFileOptions,
   customSelectStyles,
   loadCSLOptions,
 } from './select.helpers';
@@ -27,20 +25,6 @@ export function ExportFormatSettings({
   updateFormat,
   removeFormat,
 }: FormatSettingsProps) {
-  const loadFileOptions = React.useMemo(() => {
-    const fileSearch = buildFileSearch();
-    return buildLoadFileOptions(fileSearch);
-  }, []);
-
-  const defaultTemplate = React.useMemo(() => {
-    if (!format.templatePath) return undefined;
-
-    const file = app.vault
-      .getMarkdownFiles()
-      .find((item) => item.path === format.templatePath);
-    return file ? { value: file.path, label: file.path } : undefined;
-  }, [format.templatePath]);
-
   const defaultStyle = React.useMemo(() => {
     if (!format.cslStyle) return undefined;
 
@@ -63,21 +47,21 @@ export function ExportFormatSettings({
     [updateFormat, index, format]
   );
 
-  const onChangeCSLStyle = React.useCallback(
-    (e: SingleValue<{ value: string; label: string }>) => {
+  const onChangeStrValue = React.useCallback(
+    (key: keyof ExportFormat, value: string | undefined) => {
       updateFormat(index, {
         ...format,
-        cslStyle: e?.value,
+        [key]: value,
       });
     },
     [updateFormat, index, format]
   );
 
-  const onChangeTemplatePath = React.useCallback(
+  const onChangeCSLStyle = React.useCallback(
     (e: SingleValue<{ value: string; label: string }>) => {
       updateFormat(index, {
         ...format,
-        templatePath: e?.value,
+        cslStyle: e?.value,
       });
     },
     [updateFormat, index, format]
@@ -109,34 +93,39 @@ export function ExportFormatSettings({
       <div className="zt-format__form">
         <div className="zt-format__label">Output Path</div>
         <div className="zt-format__input-wrapper">
-          <input
-            onChange={onChangeStr}
-            type="text"
-            data-key="outputPathTemplate"
-            value={format.outputPathTemplate}
+          <VaultPathSuggestInput
+            kind="folder"
+            applyMode="folder-prefix"
+            defaultValue={format.outputPathTemplate}
+            placeholder="Search folders or type a path template..."
+            onChange={(value) => onChangeStrValue('outputPathTemplate', value)}
           />
         </div>
         <div className="zt-format__input-note">
           The file path of the exported markdown. Supports templating, eg{' '}
-          <pre>My Folder/{'{{citekey}}'}.md</pre>. Templates have access to data
-          from the Zotero item and its first attachment.
+          <pre>My Folder/@{'{{citekey}}'}.md</pre>. Templates have access to
+          data from the Zotero item and its first attachment.
         </div>
       </div>
 
       <div className="zt-format__form">
         <div className="zt-format__label">Image Output Path</div>
         <div className="zt-format__input-wrapper">
-          <input
-            onChange={onChangeStr}
-            type="text"
-            data-key="imageOutputPathTemplate"
-            value={format.imageOutputPathTemplate}
+          <VaultPathSuggestInput
+            kind="folder"
+            defaultValue={format.imageOutputPathTemplate}
+            placeholder="Search folders or type a folder template..."
+            onChange={(value) =>
+              onChangeStrValue('imageOutputPathTemplate', value)
+            }
           />
         </div>
         <div className="zt-format__input-note">
-          The folder in which images should be saved. Supports templating, eg{' '}
-          <pre>Assets/{'{{citekey}}'}/</pre>. Templates have access to data from
-          the Zotero item and its first attachment.
+          The folder in which images should be saved, relative to the imported
+          note folder. Supports templating, eg{' '}
+          <pre>images/</pre>. Templates have access to data from the Zotero item
+          and its first attachment. Filename-only paths are placed below{' '}
+          <code>images/</code>.
         </div>
       </div>
 
@@ -151,8 +140,9 @@ export function ExportFormatSettings({
           />
         </div>
         <div className="zt-format__input-note">
-          The base file name of exported images. Eg. <pre>image</pre> will
-          result in <pre>image-1-x123-y456.jpg</pre> where <pre>1</pre> is the
+          The base file name of exported images. Eg.{' '}
+          <pre>@{'{{citekey}}'}-image</pre> will result in{' '}
+          <pre>@smith2024-image-1-x123-y456.jpg</pre> where <pre>1</pre> is the
           page number and <pre>x123</pre> and <pre>y456</pre> are the x and y
           coordinates of rectangle annotation on the page. Supports templating.
           Templates have access to data from the Zotero item and its first
@@ -163,21 +153,18 @@ export function ExportFormatSettings({
       <div className="zt-format__form">
         <div className="zt-format__label">Template File</div>
         <div className="zt-format__input-wrapper">
-          <AsyncSelect
-            noOptionsMessage={NoFileOptionMessage}
-            placeholder="Search..."
-            cacheOptions
-            defaultValue={defaultTemplate}
-            className="zt-multiselect"
-            loadOptions={loadFileOptions}
-            isClearable
-            onChange={onChangeTemplatePath}
-            styles={customSelectStyles}
+          <VaultPathSuggestInput
+            kind="file"
+            defaultValue={format.templatePath || ''}
+            placeholder="Search template files..."
+            onChange={(value) =>
+              onChangeStrValue('templatePath', value || undefined)
+            }
           />
         </div>
         <div className="zt-format__input-note">
-          Open the data explorer from the command pallet to see available
-          template data. Templates are written using{' '}
+          Use the Test import template with Zotero item command to see
+          available template data. Templates are written using{' '}
           <a
             href="https://mozilla.github.io/nunjucks/templating.html#variables"
             target="_blank"
@@ -305,8 +292,10 @@ export function ExportFormatSettings({
             cacheOptions
             defaultValue={defaultStyle}
             className="zt-multiselect"
+            classNamePrefix="zt-select"
             loadOptions={loadCSLOptions}
             isClearable
+            maxMenuHeight={260}
             onChange={onChangeCSLStyle}
             styles={customSelectStyles}
           />

@@ -7,7 +7,7 @@ There can be multiple reason for imports to fail.
 - Please verify that your Bibliography Style is set and available in Zotero, too.
 - Please check the [Obsidian Error Console](https://forum.obsidian.md/t/how-to-access-the-console/16703)
 - Please double check your template to see if there is some typo.
-- Use the plugins Data Explorer and check the raw data received from Zotero. This data is used then by the template to extract & format the information.
+- Use the `Test import template with Zotero item` command and check the raw data received from Zotero. This data is used by the template to extract and format the information.
 - Please also check also the FAQ entry "My import doesn't see any annotations"
 
 
@@ -27,11 +27,11 @@ Short answer is no.
 In the past you had to extract annotations in Zotero into its own note. This is no longer required. When using templating, you can extract the annotation directly from Zotero. But this requires setting up a good template that works for you.
 
 ### But it might be easier to extract annotations first
-The easiest way is to extract annotations in Zotero first and then use the "Insert notes into current document". Example import:
+The easiest way is to use a literature-note import template that renders annotations directly from Zotero. Example import:
 
 <img src="https://raw.githubusercontent.com/mgmeyers/obsidian-zotero-integration/main/screenshots/demo.gif" alt="A short gif demonstraiting importing notes form Zotero into the current file">
 
-Importing via "Insert notes into your current document" will loose you the annotation color and any images/blocks you marked. This might not be desireable, but you no longer need to setup your own import template.
+Rendering annotations through a literature-note template preserves annotation color data and image references when available.
 
 
 ## My import doesn't see any annotations / doesn't import any images

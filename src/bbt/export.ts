@@ -12,11 +12,14 @@ import {
   RenderCiteTemplateParams,
   ZoteroConnectorSettings,
 } from '../types';
+import { writeManagedZoteroFrontmatter } from '../ZoteroManagedProperties';
 import { applyBasicTemplates } from './basicTemplates/applyBasicTemplates';
 import { CiteKey, getCiteKeyFromAny, getCiteKeys } from './cayw';
 import { processZoteroAnnotationNotes } from './exportNotes';
 import { extractAnnotations } from './extractAnnotations';
 import {
+  applyImageImportFolder,
+  applyNoteImportFolder,
   getColorCategory,
   getLocalURI,
   mkMDDir,
@@ -594,6 +597,14 @@ async function getTemplateData(
   return await applyBasicTemplates(markdownPath, item);
 }
 
+function getPathOverrideKey(item: any): string | null {
+  const citekey = getCiteKeyFromAny(item)?.key || item?.citekey || item?.citationKey;
+  const libraryID = item?.libraryID || getCiteKeyFromAny(item)?.library;
+
+  if (!citekey || !libraryID) return null;
+  return `${libraryID}:${String(citekey).toLocaleLowerCase()}`;
+}
+
 export async function exportToMarkdown(
   params: ExportToMarkdownParams,
   explicitCiteKeys?: CiteKey[],
@@ -664,16 +675,23 @@ export async function exportToMarkdown(
     }
   };
 
-  const getMarkdownPath = async (pathTemplateData: any) => {
+  const getMarkdownPath = async (pathTemplateData: any, item: any) => {
+    const overrideKey = getPathOverrideKey(item);
+    const overridePath = overrideKey ? options?.pathOverrides?.[overrideKey] : '';
+    if (overridePath) return normalizePath(removeStartingSlash(overridePath));
+
     return normalizePath(
-      sanitizeFilePath(
-        removeStartingSlash(
-          await renderTemplate(
-            sourcePath,
-            exportFormat.outputPathTemplate,
-            pathTemplateData
+      applyNoteImportFolder(
+        sanitizeFilePath(
+          removeStartingSlash(
+            await renderTemplate(
+              sourcePath,
+              exportFormat.outputPathTemplate,
+              pathTemplateData
+            )
           )
-        )
+        ),
+        settings.noteImportFolder
       )
     );
   };
@@ -688,7 +706,7 @@ export async function exportToMarkdown(
         annotations: [],
         ...item,
       });
-      const markdownPath = await getMarkdownPath(pathTemplateData);
+      const markdownPath = await getMarkdownPath(pathTemplateData, item);
 
       await queueRender(markdownPath, item);
       continue;
@@ -705,7 +723,8 @@ export async function exportToMarkdown(
         ...item,
       });
 
-      const imageRelativePath = exportFormat.imageOutputPathTemplate
+      const markdownPath = await getMarkdownPath(pathTemplateData, item);
+      const renderedImagePath = exportFormat.imageOutputPathTemplate
         ? normalizePath(
             sanitizeFilePath(
               removeStartingSlash(
@@ -717,6 +736,9 @@ export async function exportToMarkdown(
               )
             )
           )
+        : '';
+      const imageRelativePath = renderedImagePath
+        ? normalizePath(applyImageImportFolder(renderedImagePath, markdownPath))
         : '';
 
       const imageOutputPath = path.resolve(vaultRoot, imageRelativePath);
@@ -732,8 +754,6 @@ export async function exportToMarkdown(
             )
           )
         : 'image';
-
-      const markdownPath = await getMarkdownPath(pathTemplateData);
 
       let annots: any[] = [];
 
@@ -815,18 +835,35 @@ export async function exportToMarkdown(
       if (!rendered) continue;
 
       if (file) {
-        // Show confirmation modal before overwriting existing file
-        const modal = new ConfirmationModal(
-          app,
-          'Literature Note Already Exists',
-          `The literature note "${markdownPath}" has been created before. Are you sure you want to overwrite it?`
-        );
-        modal.open();
-        
-        const shouldOverwrite = await modal.waitForResult();
+        const previousFrontmatter =
+          app.metadataCache.getFileCache(file)?.frontmatter as
+            | Record<string, any>
+            | undefined;
+
+        let shouldOverwrite = Boolean(options?.forceOverwrite);
+
+        if (!shouldOverwrite) {
+          // Show confirmation modal before overwriting existing file
+          const modal = new ConfirmationModal(
+            app,
+            'Literature Note Already Exists',
+            `The literature note "${markdownPath}" has been created before. Are you sure you want to overwrite it?`
+          );
+          modal.open();
+
+          shouldOverwrite = await modal.waitForResult();
+        }
         
         if (shouldOverwrite) {
           await app.vault.modify(file, rendered);
+          await writeManagedZoteroFrontmatter(
+            app,
+            file,
+            item,
+            settings,
+            options?.managedProperties,
+            previousFrontmatter
+          );
           if (options?.afterWrite) {
             await options.afterWrite(file, item, markdownPath);
           }
@@ -835,6 +872,13 @@ export async function exportToMarkdown(
       } else {
         await mkMDDir(markdownPath);
         const createdFile = await app.vault.create(markdownPath, rendered);
+        await writeManagedZoteroFrontmatter(
+          app,
+          createdFile,
+          item,
+          settings,
+          options?.managedProperties
+        );
         if (options?.afterWrite) {
           await options.afterWrite(createdFile, item, markdownPath);
         }

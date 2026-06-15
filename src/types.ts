@@ -28,6 +28,8 @@ export type NotesToOpenAfterImport =
   | 'last-imported-note'
   | 'all-imported-notes';
 
+export type ZoteroMonitorAutomaticAction = 'notice' | 'modal';
+
 export interface CalloutDef {
   type: string;
   prefix: string;
@@ -69,6 +71,9 @@ export interface ExportToMarkdownParams {
 
 export interface ExportToMarkdownOptions {
   afterWrite?: (file: TFile, item: any, markdownPath: string) => Promise<void>;
+  forceOverwrite?: boolean;
+  managedProperties?: ZoteroManagedUserProperties;
+  pathOverrides?: Record<string, string>;
 }
 
 export interface RenderCiteTemplateParams {
@@ -97,6 +102,7 @@ export interface ZoteroConnectorSettings {
   settingsVersion?: number;
   shouldConcat?: boolean;
   whichNotesToOpenAfterImport: NotesToOpenAfterImport;
+  zoteroMonitorAutomaticAction: ZoteroMonitorAutomaticAction;
   zoteroMonitorCheckOnStartup: boolean;
   zoteroMonitorCollectionScope: string[];
   zoteroMonitorEnabled: boolean;
@@ -107,6 +113,13 @@ export interface ZoteroConnectorSettings {
   zoteroMonitorReadingStatusValue: string;
   zoteroMonitorRecentDays: number | null;
   zoteroMonitorTagScope: string[];
+  zoteroOrphanedProperty: string;
+  zoteroPreservedProperties: string[];
+  zoteroSciteApiToken: string;
+  zoteroSciteEnabled: boolean;
+  zoteroSciteRefreshIntervalDays: number;
+  zoteroSciteRefreshOnImport: boolean;
+  zoteroTaskAnnotationColors: string[];
 }
 
 export interface CiteKeyExport {
@@ -127,6 +140,14 @@ export interface ZoteroMonitorMetadataSettings {
   readingStatusValue: string;
 }
 
+export interface ZoteroManagedUserProperties {
+  zoteroProject?: string[];
+  zoteroTopic?: string[];
+  zoteroNote?: string;
+  zoteroSummary?: string;
+  zoteroStatus?: string;
+}
+
 export interface ZoteroMonitorItem {
   citekey: string;
   libraryID: number;
@@ -138,4 +159,18 @@ export interface ZoteroMonitorItem {
   collections?: any[];
   tags?: any[];
   item: any;
+}
+
+export interface ZoteroVaultNote {
+  file?: TFile;
+  path: string;
+  basename: string;
+  frontmatter: Record<string, any>;
+}
+
+export interface ZoteroOrphanedNote extends ZoteroVaultNote {
+  citekey?: string;
+  libraryID?: string;
+  itemKey?: string;
+  reason: string;
 }

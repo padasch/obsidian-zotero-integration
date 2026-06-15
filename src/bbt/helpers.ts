@@ -39,6 +39,50 @@ export function sanitizeFilePath(filePath: string) {
   return path.join(dir, `${name}${parsed.ext}`);
 }
 
+export function applyNoteImportFolder(
+  markdownPath: string,
+  noteImportFolder?: string
+): string {
+  const cleanedPath = markdownPath.replace(/\\/g, '/').replace(/^\/+/, '');
+  const folder = String(noteImportFolder || '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+
+  if (!folder) return cleanedPath;
+  if (cleanedPath.includes('/')) return cleanedPath;
+
+  return `${folder}/${cleanedPath}`;
+}
+
+export function applyImageImportFolder(
+  imagePath: string,
+  markdownPath: string
+): string {
+  const cleanedImagePath = imagePath
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+
+  if (!cleanedImagePath) return '';
+
+  const noteFolder = path
+    .dirname(markdownPath.replace(/\\/g, '/'))
+    .replace(/^\.\/?$/, '')
+    .replace(/^\/+|\/+$/g, '');
+  const imageFolder = cleanedImagePath === 'images'
+    ? 'images'
+    : cleanedImagePath.includes('/')
+    ? cleanedImagePath
+    : `images/${cleanedImagePath}`;
+
+  if (!noteFolder) return imageFolder;
+  if (imageFolder === noteFolder || imageFolder.startsWith(`${noteFolder}/`)) {
+    return imageFolder;
+  }
+
+  return `${noteFolder}/${imageFolder}`;
+}
+
 function hexToHSL(str: string) {
   let rStr = '0',
     gStr = '0',

@@ -60,6 +60,7 @@ type FilterByCmd =
   | 'startswith'
   | 'endswith'
   | 'contains'
+  | 'exists'
   | 'dateafter'
   | 'dateonorafter'
   | 'datebefore'
@@ -73,10 +74,12 @@ export function filterBy(
 ) {
   const getter = getAttrGetter(prop);
 
-  if (val.length === 0) return arr;
+  if (val.length === 0 && cmd !== 'exists') return arr;
 
   return arr.filter((v: any) => {
     let toTest: string = typeof v === 'string' ? v : getter(v);
+
+    if (cmd === 'exists') return !!toTest;
 
     if (!toTest) return false;
 
@@ -139,6 +142,20 @@ export function format(date: moment.Moment, format: string) {
     'Error: `format` can only be applied to dates. Tried for format ' +
     typeof date
   );
+}
+
+export function markdownLinkLabel(value: string, label: string) {
+  const link = `${value || ''}`.trim();
+  if (!link) return '';
+
+  const match = link.match(/^\[[^\]]*\]\((.*)\)$/s);
+  const target = match ? match[1] : link;
+
+  return `[${label}](${target})`;
+}
+
+export function nl2br(value: any) {
+  return `${value || ''}`.replace(/\r\n|\r|\n/g, '<br>');
 }
 
 interface WithRetained {
@@ -280,6 +297,8 @@ template.addFilter('setAttribute', function (dictionary, key: any, value: any) {
 });
 template.addFilter('filterby', filterBy);
 template.addFilter('format', format);
+template.addFilter('markdownLinkLabel', markdownLinkLabel);
+template.addFilter('nl2br', nl2br);
 template.addExtension(PersistExtension.id, new PersistExtension());
 
 export function renderTemplate(

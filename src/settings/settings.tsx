@@ -4,7 +4,17 @@ import ReactDOM from 'react-dom';
 import which from 'which';
 
 import ZoteroConnector from '../main';
-import { formatScopeInput, splitScopeInput } from '../ZoteroMonitor.helpers';
+import {
+  DEFAULT_ZOTERO_IMAGE_BASE_NAME_TEMPLATE,
+  DEFAULT_ZOTERO_IMAGE_OUTPUT_PATH_TEMPLATE,
+  ZOTERO_ANNOTATION_COLORS,
+  ZOTERO_ANNOTATION_COLOR_HEX,
+} from '../ZoteroManagedProperties';
+import {
+  ZOTERO_ORPHANED_DEFAULT_PROPERTY,
+  formatScopeInput,
+  splitScopeInput,
+} from '../ZoteroMonitor.helpers';
 import {
   CitationFormat,
   ExportFormat,
@@ -15,6 +25,7 @@ import { CiteFormatSettings } from './CiteFormatSettings';
 import { ExportFormatSettings } from './ExportFormatSettings';
 import { Icon } from './Icon';
 import { SettingItem } from './SettingItem';
+import { VaultPathSuggestInput } from './VaultPathSuggestInput';
 
 interface SettingsComponentProps {
   settings: ZoteroConnectorSettings;
@@ -25,7 +36,21 @@ interface SettingsComponentProps {
   updateExportFormat: (index: number, format: ExportFormat) => ExportFormat[];
   removeExportFormat: (index: number) => ExportFormat[];
   updateSetting: (key: keyof ZoteroConnectorSettings, value: any) => void;
+  runZoteroSciteRefresh: () => void;
   runZoteroMonitorCheck: () => void;
+  runZoteroOrphanedCheck: () => void;
+  runZoteroUpdateCheck: () => void;
+}
+
+function splitLineInput(value: string): string[] {
+  return value
+    .split(/\n/g)
+    .map((v) => v.trim())
+    .filter((v) => !!v);
+}
+
+function formatLineInput(value?: string[]): string {
+  return (value || []).join('\n');
 }
 
 function SettingsComponent({
@@ -37,7 +62,10 @@ function SettingsComponent({
   updateExportFormat,
   removeExportFormat,
   updateSetting,
+  runZoteroSciteRefresh,
   runZoteroMonitorCheck,
+  runZoteroOrphanedCheck,
+  runZoteroUpdateCheck,
 }: SettingsComponentProps) {
   const [citeFormatState, setCiteFormatState] = React.useState(
     settings.citeFormats
@@ -60,6 +88,18 @@ function SettingsComponent({
 
   const [zoteroMonitorStartup, setZoteroMonitorStartup] = React.useState(
     !!settings.zoteroMonitorCheckOnStartup
+  );
+
+  const [taskAnnotationColors, setTaskAnnotationColors] = React.useState(
+    settings.zoteroTaskAnnotationColors || []
+  );
+
+  const [sciteEnabled, setSciteEnabled] = React.useState(
+    !!settings.zoteroSciteEnabled
+  );
+
+  const [sciteRefreshOnImport, setSciteRefreshOnImport] = React.useState(
+    settings.zoteroSciteRefreshOnImport !== false
   );
 
   const updateCite = React.useCallback(
@@ -104,9 +144,9 @@ function SettingsComponent({
     setExportFormatState(
       addExportFormat({
         name: `Import #${exportFormatState.length + 1}`,
-        outputPathTemplate: '{{citekey}}.md',
-        imageOutputPathTemplate: '{{citekey}}/',
-        imageBaseNameTemplate: 'image',
+        outputPathTemplate: '@{{citekey}}.md',
+        imageOutputPathTemplate: DEFAULT_ZOTERO_IMAGE_OUTPUT_PATH_TEMPLATE,
+        imageBaseNameTemplate: DEFAULT_ZOTERO_IMAGE_BASE_NAME_TEMPLATE,
       })
     );
   }, [addExportFormat, citeFormatState]);
@@ -170,17 +210,11 @@ function SettingsComponent({
         name="Note Import Location"
         description="Notes imported from Zotero will be added to this folder in your vault"
       >
-        <input
-          onChange={(e) =>
-            updateSetting(
-              'noteImportFolder',
-              (e.target as HTMLInputElement).value
-            )
-          }
-          type="text"
-          spellCheck={false}
-          placeholder="Example: folder 1/folder 2"
+        <VaultPathSuggestInput
+          kind="folder"
           defaultValue={settings.noteImportFolder}
+          placeholder="Search or type a folder path..."
+          onChange={(value) => updateSetting('noteImportFolder', value)}
         />
       </SettingItem>
       <SettingItem
@@ -233,10 +267,133 @@ function SettingsComponent({
           className={`checkbox-container${concat ? ' is-enabled' : ''}`}
         />
       </SettingItem>
-      <SettingItem name="Zotero Monitor" isHeading />
+      <SettingItem name="Managed Zotero Properties" isHeading />
+      <SettingItem
+        name="Preserved properties"
+        description="Frontmatter properties that should keep hand-edited values during re-imports. Use one property per line."
+      >
+        <textarea
+          spellCheck={false}
+          rows={6}
+          defaultValue={formatLineInput(settings.zoteroPreservedProperties)}
+          onChange={(e) =>
+            updateSetting(
+              'zoteroPreservedProperties',
+              splitLineInput((e.target as HTMLTextAreaElement).value)
+            )
+          }
+        />
+      </SettingItem>
+      <SettingItem
+        name="Annotation task colors"
+        description="Zotero annotation colors that should mark a paper as having follow-up work."
+      >
+        <div className="zt-managed-color-list">
+          {ZOTERO_ANNOTATION_COLORS.map((color) => {
+            const isEnabled = taskAnnotationColors.includes(color);
+
+            return (
+              <button
+                key={color}
+                type="button"
+                className={`zt-managed-color-button${
+                  isEnabled ? ' is-active' : ''
+                }`}
+                onClick={() => {
+                  setTaskAnnotationColors((state) => {
+                    const next = state.includes(color)
+                      ? state.filter((item) => item !== color)
+                      : [...state, color];
+                    updateSetting('zoteroTaskAnnotationColors', next);
+                    return next;
+                  });
+                }}
+              >
+                <span
+                  className="zt-managed-color-chip"
+                  style={{
+                    backgroundColor: ZOTERO_ANNOTATION_COLOR_HEX[color],
+                  }}
+                />
+                {color}
+              </button>
+            );
+          })}
+        </div>
+      </SettingItem>
+      <SettingItem
+        name="Enable scite citation metadata"
+        description="Fetch DOI-based scite tallies and write them as managed Obsidian properties. Imports still work if scite is unavailable."
+      >
+        <div
+          onClick={() => {
+            setSciteEnabled((state) => {
+              updateSetting('zoteroSciteEnabled', !state);
+              return !state;
+            });
+          }}
+          className={`checkbox-container${sciteEnabled ? ' is-enabled' : ''}`}
+        />
+      </SettingItem>
+      <SettingItem
+        name="scite API token"
+        description="Optional. Public tally endpoints can work without a token, but a token can be used if your scite account provides one."
+      >
+        <input
+          type="password"
+          spellCheck={false}
+          placeholder="Bearer token, optional"
+          defaultValue={settings.zoteroSciteApiToken || ''}
+          onChange={(e) =>
+            updateSetting(
+              'zoteroSciteApiToken',
+              (e.target as HTMLInputElement).value.trim()
+            )
+          }
+        />
+      </SettingItem>
+      <SettingItem
+        name="Refresh scite on import/update"
+        description="When enabled, imports and note updates refresh scite fields if the existing metadata is stale."
+      >
+        <div
+          onClick={() => {
+            setSciteRefreshOnImport((state) => {
+              updateSetting('zoteroSciteRefreshOnImport', !state);
+              return !state;
+            });
+          }}
+          className={`checkbox-container${
+            sciteRefreshOnImport ? ' is-enabled' : ''
+          }`}
+        />
+      </SettingItem>
+      <SettingItem
+        name="scite refresh interval"
+        description="Days before scite metadata is considered stale during imports. Use 0 to refresh every import."
+      >
+        <input
+          min="0"
+          type="number"
+          defaultValue={String(settings.zoteroSciteRefreshIntervalDays ?? 7)}
+          onChange={(e) =>
+            updateSetting(
+              'zoteroSciteRefreshIntervalDays',
+              Number((e.target as HTMLInputElement).value)
+            )
+          }
+        />
+      </SettingItem>
+      <SettingItem
+        name="Refresh scite now"
+        description="Force-refresh scite properties on existing Zotero literature notes with DOI metadata."
+      >
+        <button onClick={runZoteroSciteRefresh}>Refresh scite metadata</button>
+      </SettingItem>
+      <SettingItem name="Zotero Monitor And Cleanup" isHeading />
       <SettingItem
         name="Enable Zotero monitor"
-        description="Check Zotero for recently added citekeyed items that are missing Obsidian literature-note properties."
+        description="Find recently added citekeyed Zotero items that are missing Obsidian literature-note properties."
       >
         <div
           onClick={() => {
@@ -281,6 +438,24 @@ function SettingsComponent({
             )
           }
         />
+      </SettingItem>
+      <SettingItem
+        name="Automatic check behavior"
+        description="Choose what happens when a background check finds missing Zotero references."
+      >
+        <select
+          className="dropdown"
+          defaultValue={settings.zoteroMonitorAutomaticAction}
+          onChange={(e) =>
+            updateSetting(
+              'zoteroMonitorAutomaticAction',
+              (e.target as HTMLSelectElement).value as any
+            )
+          }
+        >
+          <option value="notice">Show notice</option>
+          <option value="modal">Open import modal</option>
+        </select>
       </SettingItem>
       <SettingItem
         name="Recent Zotero items"
@@ -374,39 +549,39 @@ function SettingsComponent({
         </select>
       </SettingItem>
       <SettingItem
-        name="Reading status property"
-        description="Property written to newly imported monitor notes for Obsidian Bases."
+        name="Orphan flag property"
+        description="Property written to Obsidian notes that have Zotero identity metadata but no matching Zotero item."
       >
         <input
           type="text"
           spellCheck={false}
-          defaultValue={settings.zoteroMonitorReadingStatusProperty}
+          placeholder={ZOTERO_ORPHANED_DEFAULT_PROPERTY}
+          defaultValue={
+            settings.zoteroOrphanedProperty || ZOTERO_ORPHANED_DEFAULT_PROPERTY
+          }
           onChange={(e) =>
             updateSetting(
-              'zoteroMonitorReadingStatusProperty',
-              (e.target as HTMLInputElement).value
+              'zoteroOrphanedProperty',
+              (e.target as HTMLInputElement).value.trim() ||
+                ZOTERO_ORPHANED_DEFAULT_PROPERTY
             )
           }
         />
+      </SettingItem>
+      <SettingItem name="Find missing literature notes now">
+        <button onClick={runZoteroMonitorCheck}>Find missing notes</button>
       </SettingItem>
       <SettingItem
-        name="Reading status value"
-        description="Default value written when the reading status property is not already present."
+        name="Update existing literature notes"
+        description="Refresh note content and Zotero-owned properties for existing Obsidian literature notes, preserving configured hand-edited properties."
       >
-        <input
-          type="text"
-          spellCheck={false}
-          defaultValue={settings.zoteroMonitorReadingStatusValue}
-          onChange={(e) =>
-            updateSetting(
-              'zoteroMonitorReadingStatusValue',
-              (e.target as HTMLInputElement).value
-            )
-          }
-        />
+        <button onClick={runZoteroUpdateCheck}>Review updates</button>
       </SettingItem>
-      <SettingItem name="Check Zotero now">
-        <button onClick={runZoteroMonitorCheck}>Check now</button>
+      <SettingItem
+        name="Check Obsidian for Zotero orphans"
+        description="Find Obsidian literature notes whose Zotero identity properties no longer match a current Zotero item."
+      >
+        <button onClick={runZoteroOrphanedCheck}>Review orphans</button>
       </SettingItem>
       <SettingItem name="Citation Formats" isHeading />
       <SettingItem>
@@ -670,6 +845,9 @@ export class ZoteroConnectorSettingsTab extends PluginSettingTab {
         removeExportFormat={this.removeExportFormat}
         updateSetting={this.updateSetting}
         runZoteroMonitorCheck={this.runZoteroMonitorCheck}
+        runZoteroOrphanedCheck={this.runZoteroOrphanedCheck}
+        runZoteroSciteRefresh={this.runZoteroSciteRefresh}
+        runZoteroUpdateCheck={this.runZoteroUpdateCheck}
       />,
       this.containerEl
     );
@@ -735,6 +913,18 @@ export class ZoteroConnectorSettingsTab extends PluginSettingTab {
 
   runZoteroMonitorCheck = () => {
     this.plugin.zoteroMonitor.runManualCheck();
+  };
+
+  runZoteroOrphanedCheck = () => {
+    this.plugin.zoteroMonitor.runOrphanedNotesCheck();
+  };
+
+  runZoteroSciteRefresh = () => {
+    this.plugin.zoteroMonitor.runSciteMetadataRefresh();
+  };
+
+  runZoteroUpdateCheck = () => {
+    this.plugin.zoteroMonitor.runUpdateNotesCheck();
   };
 
   debouncedSave() {

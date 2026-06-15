@@ -1,4 +1,6 @@
 import {
+  applyImageImportFolder,
+  applyNoteImportFolder,
   getPort,
   mkMDDir,
   replaceIllegalChars,
@@ -93,5 +95,67 @@ describe('sanitizeFilePath()', () => {
     expect(replaceIllegalChars('?')).toBe('');
     expect(replaceIllegalChars(':')).toBe('-');
     expect(replaceIllegalChars('*hello?')).toBe('hello');
+  });
+});
+
+describe('applyNoteImportFolder()', () => {
+  it('prefixes the note import folder for filename-only literature paths', () => {
+    expect(applyNoteImportFolder('smith2024.md', 'Literature')).toBe(
+      'Literature/smith2024.md'
+    );
+  });
+
+  it('does not prefix paths that already specify a folder', () => {
+    expect(applyNoteImportFolder('Papers/smith2024.md', 'Literature')).toBe(
+      'Papers/smith2024.md'
+    );
+  });
+
+  it('normalizes leading and trailing folder slashes', () => {
+    expect(applyNoteImportFolder('smith2024.md', '/Literature/Inbox/')).toBe(
+      'Literature/Inbox/smith2024.md'
+    );
+  });
+
+  it('leaves filename-only paths unchanged when no note import folder is set', () => {
+    expect(applyNoteImportFolder('smith2024.md', '')).toBe('smith2024.md');
+  });
+});
+
+describe('applyImageImportFolder()', () => {
+  it('places the shared images folder under the note folder', () => {
+    expect(
+      applyImageImportFolder('images', 'Literature/Inbox/@smith2024.md')
+    ).toBe('Literature/Inbox/images');
+  });
+
+  it('places filename-only image folders under images in the note folder', () => {
+    expect(
+      applyImageImportFolder('smith2024', 'Literature/Inbox/@smith2024.md')
+    ).toBe('Literature/Inbox/images/smith2024');
+  });
+
+  it('places configured image subfolders under the note folder', () => {
+    expect(
+      applyImageImportFolder(
+        'images/smith2024',
+        'Literature/Inbox/@smith2024.md'
+      )
+    ).toBe('Literature/Inbox/images/smith2024');
+  });
+
+  it('does not duplicate the note folder when the image path already includes it', () => {
+    expect(
+      applyImageImportFolder(
+        'Literature/Inbox/images/smith2024',
+        'Literature/Inbox/@smith2024.md'
+      )
+    ).toBe('Literature/Inbox/images/smith2024');
+  });
+
+  it('uses vault-level images when the note is at the vault root', () => {
+    expect(applyImageImportFolder('smith2024', '@smith2024.md')).toBe(
+      'images/smith2024'
+    );
   });
 });

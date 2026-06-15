@@ -12,7 +12,7 @@ Previously, this plugin used three different template files. For the sake of thi
 
 ## What data is available to templates?
 
-You can view the data available to templates using the `Data Explorer` command in Obsidian's command pallette.
+You can view the data available to templates using the `Test import template with Zotero item` command in Obsidian's command palette.
 
 ![](Screen%20Shot%202022-03-28%20at%2011.11.24%20AM.png)
 
@@ -61,7 +61,7 @@ Templates can reside anywhere in your Obsidian vault. The path to the template i
 
 ## How do I format lists of data?
 
-In the data explorer, you'll notice that annotations, tags, creators, and other values look something like:
+In the template tester, you'll notice that annotations, tags, creators, and other values look something like:
 
 ![](Screen%20Shot%202022-04-09%20at%206.07.10%20PM.png)
 
@@ -264,4 +264,3 @@ An example of highlighting a text fragment within the text and the same fragment
 ![](Text%20Annotation%20Example.png)
 
 > other expressions circulated at the time, from the [[sociology of translation]], to the [[anthropology of science and technology,]] to the [[sociology of mediation,]] marking the plural and fluctuating character of the intellectual project(s).
-

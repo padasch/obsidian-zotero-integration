@@ -1,12 +1,18 @@
 import {
   CiteKeyExport,
+  ZoteroOrphanedNote,
   ZoteroMonitorItem,
   ZoteroMonitorScope,
+  ZoteroVaultNote,
 } from './types';
 
-export const ZOTERO_MONITOR_CITEKEY_PROPERTY = 'citekey';
+export const ZOTERO_MONITOR_CITEKEY_PROPERTY = 'zoteroCitekey';
+export const ZOTERO_MONITOR_LEGACY_CITEKEY_PROPERTY = 'citekey';
 export const ZOTERO_MONITOR_LIBRARY_ID_PROPERTY = 'zoteroLibraryID';
 export const ZOTERO_MONITOR_ITEM_KEY_PROPERTY = 'zoteroItemKey';
+export const ZOTERO_ORPHANED_DEFAULT_PROPERTY = 'zoteroOrphaned';
+export const ZOTERO_ORPHANED_CHECKED_AT_PROPERTY = 'zoteroOrphanedCheckedAt';
+export const ZOTERO_ORPHANED_REASON_PROPERTY = 'zoteroOrphanedReason';
 
 export function splitScopeInput(value: string): string[] {
   return value
@@ -17,6 +23,163 @@ export function splitScopeInput(value: string): string[] {
 
 export function formatScopeInput(value?: string[]): string {
   return (value || []).join(', ');
+}
+
+export interface DirectCitekeyInput {
+  citekey: string;
+  libraryID?: number;
+}
+
+export function parseDirectCitekeyInput(value: string): DirectCitekeyInput[] {
+  const seen = new Set<string>();
+  const refs: DirectCitekeyInput[] = [];
+
+  for (const rawPart of value.split(/[,\s;]+/g)) {
+    const raw = rawPart.trim().replace(/^@/, '');
+    if (!raw) continue;
+
+    const match = raw.match(/^(\d+)[/:](.+)$/);
+    const libraryID = match ? Number(match[1]) : undefined;
+    const citekey = (match ? match[2] : raw).trim().replace(/^@/, '');
+    if (!citekey) continue;
+
+    const key = `${libraryID || ''}:${citekey.toLocaleLowerCase()}`;
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    refs.push({ citekey, libraryID });
+  }
+
+  return refs;
+}
+
+export function formatDirectCitekeyInput(candidate: CiteKeyExport): string {
+  return `${candidate.libraryID}:${candidate.citekey}`;
+}
+
+function directInputMatchesCandidate(
+  input: DirectCitekeyInput,
+  candidate: CiteKeyExport
+): boolean {
+  const sameCitekey =
+    input.citekey.toLocaleLowerCase() ===
+    candidate.citekey.toLocaleLowerCase();
+  if (!sameCitekey) return false;
+
+  return input.libraryID === undefined || input.libraryID === candidate.libraryID;
+}
+
+export function filterDirectCitekeySuggestions(
+  candidates: CiteKeyExport[],
+  query: string,
+  selected: DirectCitekeyInput[] = [],
+  limit = 12
+): CiteKeyExport[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+
+  return candidates
+    .filter(
+      (candidate) =>
+        !selected.some((input) => directInputMatchesCandidate(input, candidate))
+    )
+    .filter((candidate) => {
+      if (!normalizedQuery) return true;
+
+      return [
+        candidate.citekey,
+        `@${candidate.citekey}`,
+        candidate.title,
+        candidate.libraryName,
+        candidate.libraryID,
+      ]
+        .join(' ')
+        .toLocaleLowerCase()
+        .includes(normalizedQuery);
+    })
+    .sort((a, b) => {
+      const titleComparison = a.title.localeCompare(b.title, undefined, {
+        sensitivity: 'base',
+      });
+      if (titleComparison !== 0) return titleComparison;
+
+      const citekeyComparison = a.citekey.localeCompare(b.citekey, undefined, {
+        sensitivity: 'base',
+      });
+      if (citekeyComparison !== 0) return citekeyComparison;
+
+      return a.libraryID - b.libraryID;
+    })
+    .slice(0, limit);
+}
+
+export function getDelimitedTokenBounds(
+  value: string,
+  cursor = value.length
+): { start: number; end: number; query: string } {
+  const safeCursor = Math.max(0, Math.min(cursor, value.length));
+  const beforeCursor = value.slice(0, safeCursor);
+  const previousComma = beforeCursor.lastIndexOf(',');
+  const previousNewline = beforeCursor.lastIndexOf('\n');
+  const start = Math.max(previousComma, previousNewline) + 1;
+  const nextComma = value.indexOf(',', safeCursor);
+  const nextNewline = value.indexOf('\n', safeCursor);
+  const nextSeparators = [nextComma, nextNewline].filter((index) => index >= 0);
+  const end = nextSeparators.length ? Math.min(...nextSeparators) : value.length;
+
+  return {
+    start,
+    end,
+    query: value.slice(start, safeCursor).trim(),
+  };
+}
+
+export function replaceDelimitedToken(
+  value: string,
+  cursor: number,
+  replacement: string
+): { value: string; cursor: number } {
+  const bounds = getDelimitedTokenBounds(value, cursor);
+  const prefix = value.slice(0, bounds.start);
+  const suffix = value.slice(bounds.end);
+  const spacer = prefix && !/\s$/.test(prefix) ? ' ' : '';
+  const nextValue = `${prefix}${spacer}${replacement}${suffix}`;
+  const nextCursor = prefix.length + spacer.length + replacement.length;
+
+  return {
+    value: nextValue,
+    cursor: nextCursor,
+  };
+}
+
+function normalizeSuggestionSearch(value: string): string {
+  return value
+    .replace(/[\[\]]/g, '')
+    .trim()
+    .toLocaleLowerCase();
+}
+
+export function filterDelimitedSuggestions(
+  suggestions: string[],
+  query: string,
+  limit = 8
+): string[] {
+  const rawQuery = query.trim().toLocaleLowerCase();
+  if (!rawQuery) return [];
+
+  const normalizedQuery = normalizeSuggestionSearch(query);
+
+  return suggestions
+    .filter((suggestion) => {
+      const rawSuggestion = suggestion.toLocaleLowerCase();
+      const normalizedSuggestion = normalizeSuggestionSearch(suggestion);
+
+      return (
+        rawSuggestion.includes(rawQuery) ||
+        (Boolean(normalizedQuery) &&
+          normalizedSuggestion.includes(normalizedQuery))
+      );
+    })
+    .slice(0, limit);
 }
 
 function normalizeValue(value: any): string {
@@ -39,6 +202,18 @@ function frontmatterIncludes(frontmatter: Record<string, any>, key: string, valu
   if (!normalized) return false;
 
   return valuesFromFrontmatter(frontmatter[key]).includes(normalized);
+}
+
+function firstFrontmatterValue(
+  frontmatter: Record<string, any>,
+  keys: string[]
+): string | undefined {
+  for (const key of keys) {
+    const value = valuesFromFrontmatter(frontmatter[key])[0];
+    if (value) return value;
+  }
+
+  return undefined;
 }
 
 export function getZoteroItemKey(item: any): string | null {
@@ -135,11 +310,97 @@ export function isZoteroItemInFrontmatter(
     return true;
   }
 
-  return frontmatterIncludes(
-    frontmatter,
-    ZOTERO_MONITOR_CITEKEY_PROPERTY,
-    item.citekey
+  if (
+    hasLibraryID &&
+    frontmatterIncludes(
+      frontmatter,
+      ZOTERO_MONITOR_LEGACY_CITEKEY_PROPERTY,
+      item.citekey
+    )
+  ) {
+    return true;
+  }
+
+  return (
+    frontmatterIncludes(
+      frontmatter,
+      ZOTERO_MONITOR_CITEKEY_PROPERTY,
+      item.citekey
+    ) ||
+    frontmatterIncludes(
+      frontmatter,
+      ZOTERO_MONITOR_LEGACY_CITEKEY_PROPERTY,
+      item.citekey
+    )
   );
+}
+
+export function hasZoteroIdentity(frontmatter: Record<string, any>): boolean {
+  return Boolean(
+    firstFrontmatterValue(frontmatter, [
+      ZOTERO_MONITOR_CITEKEY_PROPERTY,
+      ZOTERO_MONITOR_LEGACY_CITEKEY_PROPERTY,
+      'zoteroCiteKey',
+    ]) ||
+      firstFrontmatterValue(frontmatter, [
+        ZOTERO_MONITOR_ITEM_KEY_PROPERTY,
+        'itemKey',
+      ])
+  );
+}
+
+export function getOrphanedZoteroNote(
+  note: ZoteroVaultNote,
+  zoteroItems: ZoteroMonitorItem[]
+): ZoteroOrphanedNote | null {
+  if (!hasZoteroIdentity(note.frontmatter)) return null;
+
+  if (
+    zoteroItems.some((item) =>
+      isZoteroItemInFrontmatter(item, note.frontmatter)
+    )
+  ) {
+    return null;
+  }
+
+  const citekey = firstFrontmatterValue(note.frontmatter, [
+    ZOTERO_MONITOR_CITEKEY_PROPERTY,
+    ZOTERO_MONITOR_LEGACY_CITEKEY_PROPERTY,
+    'zoteroCiteKey',
+  ]);
+  const libraryID = firstFrontmatterValue(note.frontmatter, [
+    ZOTERO_MONITOR_LIBRARY_ID_PROPERTY,
+  ]);
+  const itemKey = firstFrontmatterValue(note.frontmatter, [
+    ZOTERO_MONITOR_ITEM_KEY_PROPERTY,
+    'itemKey',
+  ]);
+
+  let reason = 'No matching Zotero item found';
+  if (libraryID && itemKey) {
+    reason = `No Zotero item with library ${libraryID} and item key ${itemKey}`;
+  } else if (libraryID && citekey) {
+    reason = `No Zotero item with library ${libraryID} and citekey ${citekey}`;
+  } else if (citekey) {
+    reason = `No Zotero item with citekey ${citekey}`;
+  }
+
+  return {
+    ...note,
+    citekey,
+    libraryID,
+    itemKey,
+    reason,
+  };
+}
+
+export function filterOrphanedZoteroNotes(
+  notes: ZoteroVaultNote[],
+  zoteroItems: ZoteroMonitorItem[]
+): ZoteroOrphanedNote[] {
+  return notes
+    .map((note) => getOrphanedZoteroNote(note, zoteroItems))
+    .filter((note): note is ZoteroOrphanedNote => !!note);
 }
 
 export function filterMissingZoteroItems(

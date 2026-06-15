@@ -3,15 +3,17 @@ import { EditableFileView, Events, Plugin, TFile } from 'obsidian';
 import { shellPath } from 'shell-path';
 
 import { DataExplorerView, viewType } from './DataExplorerView';
+import {
+  DEFAULT_ZOTERO_IMAGE_BASE_NAME_TEMPLATE,
+  DEFAULT_ZOTERO_IMAGE_OUTPUT_PATH_TEMPLATE,
+  DEFAULT_ZOTERO_PRESERVED_PROPERTIES,
+  DEFAULT_ZOTERO_TASK_ANNOTATION_COLORS,
+  normalizeManagedImportSettings,
+} from './ZoteroManagedProperties';
 import { ZoteroMonitor } from './ZoteroMonitor';
 import { LoadingModal } from './bbt/LoadingModal';
 import { getCAYW } from './bbt/cayw';
 import { exportToMarkdown, renderCiteTemplate } from './bbt/export';
-import {
-  filesFromNotes,
-  insertNotesIntoCurrentDoc,
-  noteExportPrompt,
-} from './bbt/exportNotes';
 import './bbt/template.helpers';
 import {
   currentVersion,
@@ -25,21 +27,45 @@ import {
   ExportFormat,
   ZoteroConnectorSettings,
 } from './types';
+import { ZOTERO_ORPHANED_DEFAULT_PROPERTY } from './ZoteroMonitor.helpers';
 
 const commandPrefix = 'obsidian-zotero-desktop-connector:';
 const citationCommandIDPrefix = 'zdc-';
 const exportCommandIDPrefix = 'zdc-exp-';
+const DEFAULT_CSL_STYLE = 'harvard-cite-them-right';
+const DEFAULT_CITE_FORMATS: CitationFormat[] = [
+  {
+    name: 'Citation',
+    format: 'formatted-citation',
+    cslStyle: DEFAULT_CSL_STYLE,
+  },
+  {
+    name: 'Bibliography',
+    format: 'formatted-bibliography',
+    cslStyle: DEFAULT_CSL_STYLE,
+  },
+];
+const DEFAULT_EXPORT_FORMATS: ExportFormat[] = [
+  {
+    name: 'Literature Note',
+    outputPathTemplate: '@{{citekey}}.md',
+    imageOutputPathTemplate: DEFAULT_ZOTERO_IMAGE_OUTPUT_PATH_TEMPLATE,
+    imageBaseNameTemplate: DEFAULT_ZOTERO_IMAGE_BASE_NAME_TEMPLATE,
+    cslStyle: DEFAULT_CSL_STYLE,
+  },
+];
 const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   database: 'Zotero',
   noteImportFolder: '',
   pdfExportImageDPI: 120,
   pdfExportImageFormat: 'jpg',
   pdfExportImageQuality: 90,
-  citeFormats: [],
-  exportFormats: [],
+  citeFormats: DEFAULT_CITE_FORMATS,
+  exportFormats: DEFAULT_EXPORT_FORMATS,
   citeSuggestTemplate: '[[{{citekey}}]]',
   openNoteAfterImport: false,
   whichNotesToOpenAfterImport: 'first-imported-note',
+  zoteroMonitorAutomaticAction: 'notice',
   zoteroMonitorCheckOnStartup: false,
   zoteroMonitorCollectionScope: [],
   zoteroMonitorEnabled: false,
@@ -50,6 +76,13 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   zoteroMonitorReadingStatusValue: 'unread',
   zoteroMonitorRecentDays: 30,
   zoteroMonitorTagScope: [],
+  zoteroOrphanedProperty: ZOTERO_ORPHANED_DEFAULT_PROPERTY,
+  zoteroPreservedProperties: DEFAULT_ZOTERO_PRESERVED_PROPERTIES,
+  zoteroSciteApiToken: '',
+  zoteroSciteEnabled: false,
+  zoteroSciteRefreshIntervalDays: 7,
+  zoteroSciteRefreshOnImport: true,
+  zoteroTaskAnnotationColors: DEFAULT_ZOTERO_TASK_ANNOTATION_COLORS,
 };
 
 async function fixPath() {
@@ -97,46 +130,8 @@ export default class ZoteroConnector extends Plugin {
     });
 
     this.addCommand({
-      id: 'zdc-insert-notes',
-      name: 'Insert notes into current document',
-      editorCallback: (editor) => {
-        const database = {
-          database: this.settings.database,
-          port: this.settings.port,
-        };
-        noteExportPrompt(
-          database,
-          this.app.workspace.getActiveFile()?.parent.path
-        ).then((notes) => {
-          if (notes) {
-            insertNotesIntoCurrentDoc(editor, notes);
-          }
-        });
-      },
-    });
-
-    this.addCommand({
-      id: 'zdc-import-notes',
-      name: 'Import notes',
-      callback: () => {
-        const database = {
-          database: this.settings.database,
-          port: this.settings.port,
-        };
-        noteExportPrompt(database, this.settings.noteImportFolder)
-          .then((notes) => {
-            if (notes) {
-              return filesFromNotes(this.settings.noteImportFolder, notes);
-            }
-            return [] as string[];
-          })
-          .then((notes) => this.openNotes(notes));
-      },
-    });
-
-    this.addCommand({
       id: 'show-zotero-debug-view',
-      name: 'Data explorer',
+      name: 'Test import template with Zotero item',
       callback: () => {
         this.activateDataExplorer();
       },
@@ -144,9 +139,41 @@ export default class ZoteroConnector extends Plugin {
 
     this.addCommand({
       id: 'zdc-check-missing-literature',
-      name: 'Check Zotero for missing literature notes',
+      name: 'Find missing Zotero literature notes',
       callback: () => {
         this.zoteroMonitor.runManualCheck();
+      },
+    });
+
+    this.addCommand({
+      id: 'zdc-import-specific-literature',
+      name: 'Batch import selected literature notes',
+      callback: () => {
+        this.zoteroMonitor.runDirectImport();
+      },
+    });
+
+    this.addCommand({
+      id: 'zdc-check-orphaned-literature',
+      name: 'Find orphaned Obsidian literature notes',
+      callback: () => {
+        this.zoteroMonitor.runOrphanedNotesCheck();
+      },
+    });
+
+    this.addCommand({
+      id: 'zdc-update-literature-notes',
+      name: 'Update existing literature notes from Zotero',
+      callback: () => {
+        this.zoteroMonitor.runUpdateNotesCheck();
+      },
+    });
+
+    this.addCommand({
+      id: 'zdc-refresh-scite-metadata',
+      name: 'Refresh scite metadata for literature notes',
+      callback: () => {
+        this.zoteroMonitor.runSciteMetadataRefresh();
       },
     });
 
@@ -190,7 +217,10 @@ export default class ZoteroConnector extends Plugin {
   addFormatCommand(format: CitationFormat) {
     this.addCommand({
       id: `${citationCommandIDPrefix}${format.name}`,
-      name: format.name,
+      name:
+        format.format === 'formatted-bibliography'
+          ? `Insert bibliography: ${format.name}`
+          : `Insert citation: ${format.name}`,
       editorCallback: (editor) => {
         const database = {
           database: this.settings.database,
@@ -225,7 +255,7 @@ export default class ZoteroConnector extends Plugin {
   addExportCommand(format: ExportFormat) {
     this.addCommand({
       id: `${exportCommandIDPrefix}${format.name}`,
-      name: format.name,
+      name: `Quick import from Zotero picker: ${format.name}`,
       callback: async () => {
         const database = {
           database: this.settings.database,
@@ -317,10 +347,16 @@ export default class ZoteroConnector extends Plugin {
   async loadSettings() {
     const loadedSettings = await this.loadData();
 
-    this.settings = {
+    this.settings = normalizeManagedImportSettings({
       ...DEFAULT_SETTINGS,
       ...loadedSettings,
-    };
+      citeFormats: loadedSettings?.citeFormats?.length
+        ? loadedSettings.citeFormats
+        : DEFAULT_CITE_FORMATS,
+      exportFormats: loadedSettings?.exportFormats?.length
+        ? loadedSettings.exportFormats
+        : DEFAULT_EXPORT_FORMATS,
+    });
   }
 
   async saveSettings() {
