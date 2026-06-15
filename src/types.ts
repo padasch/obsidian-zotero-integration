@@ -65,6 +65,35 @@ export interface ExportToMarkdownParams {
   exportFormat: ExportFormat;
 }
 
+export type ZoteroManagedUserStatus = string;
+
+export interface ZoteroManagedUserProperties {
+  zoteroProject: string[];
+  zoteroTopic: string[];
+  zoteroNote: string;
+  zoteroSummary?: string;
+  zoteroStatus: ZoteroManagedUserStatus;
+}
+
+export type ZoteroMonitorAutomaticAction = 'notice' | 'modal';
+
+export interface ZoteroMonitorScope {
+  libraryScope: string[];
+  collectionScope: string[];
+  tagScope: string[];
+}
+
+export interface ZoteroMonitorItem {
+  title: string;
+  citekey: string;
+  libraryID: number;
+  libraryName?: string;
+  itemKey?: string;
+  dateModified?: string;
+  dateAdded?: string;
+  item: Record<string, unknown>;
+}
+
 export interface RenderCiteTemplateParams {
   database: DatabaseWithPort;
   format: CitationFormat;
@@ -91,6 +120,17 @@ export interface ZoteroConnectorSettings {
   settingsVersion?: number;
   shouldConcat?: boolean;
   whichNotesToOpenAfterImport: NotesToOpenAfterImport;
+  zoteroPreservedProperties?: string[];
+  zoteroTaskAnnotationColors?: string[];
+  zoteroMonitorEnabled?: boolean;
+  zoteroMonitorCheckOnStartup?: boolean;
+  zoteroMonitorIntervalMinutes?: number;
+  zoteroMonitorAutomaticAction?: ZoteroMonitorAutomaticAction;
+  zoteroMonitorRecentDays?: number | null;
+  zoteroMonitorLibraryScope?: string[];
+  zoteroMonitorCollectionScope?: string[];
+  zoteroMonitorTagScope?: string[];
+  zoteroMonitorImportFormat?: string;
 }
 
 export interface CiteKeyExport {

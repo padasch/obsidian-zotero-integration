@@ -1,53 +1,93 @@
 # Obsidian Zotero Integration
 
-Insert and import citations, bibliographies, notes, and PDF annotations from Zotero into Obsidian. Requires [Better BibTeX for Zotero](https://retorque.re/zotero-better-bibtex/installation/).
+This is a maintained fork of [peterxcli/obsidian-zotero-integration](https://github.com/peterxcli/obsidian-zotero-integration).
 
-This plugin is currently maintained as a clean fork of [peterxcli/obsidian-zotero-integration](https://github.com/peterxcli/obsidian-zotero-integration) and developed further with AI-assisted coding support.
+This repo uses AI-assisted coding for cleanup, modernization, and maintenance work, and then human review for release quality.
 
-## ⚠️ Backup first
+## ⚠️ Important: create backups before installing or testing
 
-Before installing or updating, create a backup of your Obsidian vault and plugin settings.
+Before installing/updating this plugin in your vault, make a backup of:
 
-## What to expect in this fork
+- your vault contents
+- plugin settings (`.obsidian/plugins/obsidian-zotero-integration*`)
+- any templates or import formats you rely on
 
-- Cleaner settings fields with native Obsidian-style folder/file/style finders for template and bibliography style selection.
-- Persistent monitor notifications for newly found references, with one-click import actions.
-- Tidy documentation and maintenance-focused cleanup.
+## Latest release
 
-## Current release
+Current plugin release: **3.2.8**.
 
-- Version `3.2.5` includes all settings simplification, monitor actions, and documentation cleanup changes.
+## Install
+
+### Obsidian Community plugins
+
+1. Settings → Community plugins
+2. Turn off Safe mode
+3. Install and enable **Zotero Integration**
+
+### Manual install / update
+
+1. Download `manifest.json`, `main.js`, `styles.css`, and `versions.json` from the [latest GitHub release](https://github.com/padasch/obsidian-zotero-integration/releases/latest).
+2. Copy the files into:
+   `/.obsidian/plugins/obsidian-zotero-integration/` (or your local plugin folder)
+3. Reload Obsidian.
+
+## Overview
+
+- Import citations, bibliographies, notes, and PDF annotations from Zotero (and Juris-M)
+- Run imports from commands or ribbons
+- Import notes from a configurable folder
+- Quick monitor that detects newly added Zotero references in Obsidian
+
+## Key fork updates
+
+- **Obsidian-style quick pickers** in settings for:
+  - note import folder
+  - markdown template path
+  - CSL bibliography / citation style
+  
+  Start typing and Obsidian suggestions are shown from available folders/files/styles.
+- **Persistent monitor notice** for new references with explicit actions:
+  - `Open Import`
+  - `Background Import`
+  - `Ignore`
+- Cleaner and slimmer settings documentation and CSS cleanup, with legacy screenshot assets removed from the repository.
+
+## Settings that matter most
+
+### Zotero Monitor
+
+The monitor watches for missing literature notes and can run:
+
+- on startup
+- on a recurring interval
+- manually via **Check Zotero now**
+
+You can control how many recent days it considers (`Recent Zotero items`), scope (library/collections/tags), and which import format should be used for automatic/background imports.
+
+### Default-style folder/file/style entry fields
+
+The following fields are now plain input fields with typeahead recommendations:
+
+- `Note Import Location`
+- `Template File`
+- `Citation Style`
+- `Bibliography Style`
+
+This avoids non-standard select behavior and keeps the look aligned with Obsidian settings UI.
 
 ## Documentation
 
-Project documentation is maintained in [docs/README.md](docs/README.md).
+- [docs/README.md](docs/README.md)
+- [FAQ](docs/FAQ.md)
+- [Templating](docs/Templating.md)
+- [PDF Annotations](docs/PDF%20Annotations.md)
+- [Export Settings](docs/Export%20Settings.md)
 
-## Installation
+## Development notes
 
-In Obsidian:
+- Build output (`main.js`) is generated from source in this repository.
+- The old image/gif assets used in previous docs were intentionally removed.
 
-1. Open **Settings → Community plugins**
-2. Disable safe mode
-3. Browse community plugins and search for "Zotero Integration"
+## License
 
-## Monitoring new references
-
-New Zotero items can be shown as a persistent notice in Obsidian with:
-
-- **Open Import** opens the existing import modal.
-- **Background Import** imports them immediately using default managed properties.
-- **Ignore** dismisses the notice.
-
-## Troubleshooting
-
-### Help, the plugin doesn't load
-
-Make sure you are running a supported Obsidian version.
-
-### Help, I get an error when creating a citation or bibliography
-
-Ensure a citation/CSL style is available in Zotero and that a valid quick-copy style is configured there.
-
-### Help, the plugin cannot find template files
-
-Template and output fields use Obsidian search suggestions from loaded markdown files and folders. If needed, type a valid full path directly.
+MIT — see [LICENSE.md](LICENSE.md).

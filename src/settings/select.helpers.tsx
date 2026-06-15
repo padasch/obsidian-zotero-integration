@@ -12,18 +12,36 @@ export function normalizeFinderQuery(query: string): string {
   return (query || '').trim();
 }
 
+function uniqueByValue(options: FinderOption[]): FinderOption[] {
+  const seen = new Set<string>();
+  const out: FinderOption[] = [];
+
+  for (const option of options) {
+    if (!option.value || seen.has(option.value)) {
+      continue;
+    }
+
+    seen.add(option.value);
+    out.push(option);
+  }
+
+  return out;
+}
+
 export function filterFinderOptions(
   query: string,
   options: FinderOption[],
   limit = 50
 ): FinderOption[] {
   const normalized = normalizeFinderQuery(query).toLocaleLowerCase();
-  if (!normalized) return [];
+  if (!normalized) {
+    return uniqueByValue(options).slice(0, limit);
+  }
 
   const startsWith: FinderOption[] = [];
   const contains: FinderOption[] = [];
 
-  for (const option of options) {
+  for (const option of uniqueByValue(options)) {
     const lowerLabel = option.label.toLocaleLowerCase();
     const lowerValue = option.value.toLocaleLowerCase();
 
@@ -78,7 +96,7 @@ export function getFolderOptions(): FinderOption[] {
 
 function searchCSLByText(query: string) {
   const normalized = normalizeFinderQuery(query);
-  if (!normalized) return [];
+  if (!normalized) return cslListRaw;
 
   if (normalized.length < 3) {
     return cslListRaw.filter((item) => {

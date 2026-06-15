@@ -222,7 +222,7 @@ function SettingsComponent({
           value={noteImportFolder}
           placeholder="Search or type a folder path..."
           list={noteImportFolderId}
-          onChange={(e) =>
+          onInput={(e) =>
             onChangeNoteImportFolder((e.target as HTMLInputElement).value)
           }
         />

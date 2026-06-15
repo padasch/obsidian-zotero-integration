@@ -87,7 +87,7 @@ export function CiteFormatSettings({
   );
 
   const onChangeCSLStyle = React.useCallback(
-    (e: ChangeEvent) => {
+    (e: React.FormEvent<HTMLInputElement>) => {
       const value = (e.target as HTMLInputElement).value;
       setCslStyle(value);
       updateFormat(index, {
@@ -204,7 +204,7 @@ export function CiteFormatSettings({
               placeholder="Type style name"
               list={cslDatalistId}
               value={cslStyle}
-              onChange={onChangeCSLStyle}
+              onInput={onChangeCSLStyle}
             />
             <datalist id={cslDatalistId}>
               {cslOptions.map((option) => (

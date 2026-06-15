@@ -17,6 +17,7 @@ import {
   downloadAndExtract,
   internalVersion,
 } from './settings/AssetDownloader';
+import { ZoteroMonitor } from './ZoteroMonitor';
 import { ZoteroConnectorSettingsTab } from './settings/settings';
 import {
   CitationFormat,
@@ -39,6 +40,17 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   citeSuggestTemplate: '[[{{citekey}}]]',
   openNoteAfterImport: false,
   whichNotesToOpenAfterImport: 'first-imported-note',
+  zoteroPreservedProperties: [],
+  zoteroTaskAnnotationColors: ['Purple', 'Magenta', 'Gray'],
+  zoteroMonitorEnabled: false,
+  zoteroMonitorCheckOnStartup: false,
+  zoteroMonitorIntervalMinutes: 0,
+  zoteroMonitorAutomaticAction: 'notice',
+  zoteroMonitorRecentDays: 30,
+  zoteroMonitorLibraryScope: [],
+  zoteroMonitorCollectionScope: [],
+  zoteroMonitorTagScope: [],
+  zoteroMonitorImportFormat: '',
 };
 
 async function fixPath() {
@@ -66,10 +78,12 @@ export default class ZoteroConnector extends Plugin {
   settings: ZoteroConnectorSettings;
   emitter: Events;
   fuse: Fuse<CiteKeyExport>;
+  zoteroMonitor: ZoteroMonitor;
 
   async onload() {
     await this.loadSettings();
     this.emitter = new Events();
+    this.zoteroMonitor = new ZoteroMonitor(this);
 
     this.updatePDFUtility();
     this.addSettingTab(new ZoteroConnectorSettingsTab(this.app, this));
@@ -138,11 +152,22 @@ export default class ZoteroConnector extends Plugin {
     );
 
     app.workspace.trigger('parse-style-settings');
+    this.zoteroMonitor.schedule();
+
+    if (
+      this.settings.zoteroMonitorEnabled &&
+      this.settings.zoteroMonitorCheckOnStartup
+    ) {
+      this.app.workspace.onLayoutReady(() => {
+        this.zoteroMonitor.runAutomaticCheck();
+      });
+    }
 
     fixPath();
   }
 
   onunload() {
+    this.zoteroMonitor.clear();
     this.settings.citeFormats.forEach((f) => {
       this.removeFormatCommand(f);
     });
@@ -292,6 +317,7 @@ export default class ZoteroConnector extends Plugin {
 
   async saveSettings() {
     this.emitter.trigger('settingsUpdated');
+    this.zoteroMonitor.schedule();
     await this.saveData(this.settings);
   }
 

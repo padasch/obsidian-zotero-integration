@@ -58,7 +58,7 @@ export function ExportFormatSettings({
   );
 
   const onChangeCSLStyle = React.useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    (e: React.FormEvent<HTMLInputElement>) => {
       const value = e.target.value;
       setCslStyle(value);
       updateFormat(index, {
@@ -70,7 +70,7 @@ export function ExportFormatSettings({
   );
 
   const onChangeTemplatePath = React.useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    (e: React.FormEvent<HTMLInputElement>) => {
       const value = e.target.value;
       setTemplatePath(value);
       updateFormat(index, {
@@ -166,7 +166,7 @@ export function ExportFormatSettings({
             placeholder="Search markdown files"
             list={templateDatalistId}
             value={templatePath}
-            onChange={onChangeTemplatePath}
+            onInput={onChangeTemplatePath}
           />
           <datalist id={templateDatalistId}>
             {templateOptions.map((option) => (
@@ -303,7 +303,7 @@ export function ExportFormatSettings({
             placeholder="Type style name"
             list={cslDatalistId}
             value={cslStyle}
-            onChange={onChangeCSLStyle}
+            onInput={onChangeCSLStyle}
           />
           <datalist id={cslDatalistId}>
             {cslOptions.map((option) => (
