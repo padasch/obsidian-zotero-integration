@@ -5,6 +5,11 @@ import which from 'which';
 
 import ZoteroConnector from '../main';
 import {
+  ZOTERO_ANNOTATION_COLORS,
+  ZOTERO_ANNOTATION_COLOR_HEX,
+} from '../ZoteroManagedProperties';
+import { formatScopeInput, splitScopeInput } from '../ZoteroMonitor.helpers';
+import {
   CitationFormat,
   ExportFormat,
   ZoteroConnectorSettings,
@@ -14,6 +19,11 @@ import { CiteFormatSettings } from './CiteFormatSettings';
 import { ExportFormatSettings } from './ExportFormatSettings';
 import { Icon } from './Icon';
 import { SettingItem } from './SettingItem';
+import {
+  filterFinderOptions,
+  getFolderOptions,
+  useStableDatalistId,
+} from './select.helpers';
 
 interface SettingsComponentProps {
   settings: ZoteroConnectorSettings;
@@ -24,6 +34,18 @@ interface SettingsComponentProps {
   updateExportFormat: (index: number, format: ExportFormat) => ExportFormat[];
   removeExportFormat: (index: number) => ExportFormat[];
   updateSetting: (key: keyof ZoteroConnectorSettings, value: any) => void;
+  runZoteroMonitorCheck: () => void;
+}
+
+function splitLineInput(value: string): string[] {
+  return value
+    .split(/\n/g)
+    .map((v) => v.trim())
+    .filter((v) => !!v);
+}
+
+function formatLineInput(value?: string[]): string {
+  return (value || []).join('\n');
 }
 
 function SettingsComponent({
@@ -35,6 +57,7 @@ function SettingsComponent({
   updateExportFormat,
   removeExportFormat,
   updateSetting,
+  runZoteroMonitorCheck,
 }: SettingsComponentProps) {
   const [citeFormatState, setCiteFormatState] = React.useState(
     settings.citeFormats
@@ -50,6 +73,18 @@ function SettingsComponent({
   const [ocrState, setOCRState] = React.useState(settings.pdfExportImageOCR);
 
   const [concat, setConcat] = React.useState(!!settings.shouldConcat);
+
+  const [zoteroMonitorEnabled, setZoteroMonitorEnabled] = React.useState(
+    !!settings.zoteroMonitorEnabled
+  );
+
+  const [zoteroMonitorStartup, setZoteroMonitorStartup] = React.useState(
+    !!settings.zoteroMonitorCheckOnStartup
+  );
+
+  const [taskAnnotationColors, setTaskAnnotationColors] = React.useState(
+    settings.zoteroTaskAnnotationColors || []
+  );
 
   const updateCite = React.useCallback(
     debounce(
@@ -114,6 +149,29 @@ function SettingsComponent({
     settings.database === 'Custom'
   );
 
+  const folderOptions = React.useMemo(() => getFolderOptions(), []);
+  const [noteImportFolder, setNoteImportFolder] = React.useState(
+    settings.noteImportFolder
+  );
+  const noteImportFolderId = useStableDatalistId('zt-note-import-folder');
+
+  React.useEffect(() => {
+    setNoteImportFolder(settings.noteImportFolder);
+  }, [settings.noteImportFolder]);
+
+  const noteImportFolderOptions = React.useMemo(
+    () => filterFinderOptions(noteImportFolder, folderOptions),
+    [noteImportFolder, folderOptions]
+  );
+
+  const onChangeNoteImportFolder = React.useCallback(
+    (value: string) => {
+      setNoteImportFolder(value);
+      updateSetting('noteImportFolder', value);
+    },
+    [updateSetting]
+  );
+
   return (
     <div>
       <SettingItem name="General Settings" isHeading />
@@ -160,17 +218,19 @@ function SettingsComponent({
         description="Notes imported from Zotero will be added to this folder in your vault"
       >
         <input
-          onChange={(e) =>
-            updateSetting(
-              'noteImportFolder',
-              (e.target as HTMLInputElement).value
-            )
-          }
           type="text"
-          spellCheck={false}
-          placeholder="Example: folder 1/folder 2"
-          defaultValue={settings.noteImportFolder}
+          value={noteImportFolder}
+          placeholder="Search or type a folder path..."
+          list={noteImportFolderId}
+          onChange={(e) =>
+            onChangeNoteImportFolder((e.target as HTMLInputElement).value)
+          }
         />
+        <datalist id={noteImportFolderId}>
+          {noteImportFolderOptions.map((option) => (
+            <option key={option.value} value={option.value} />
+          ))}
+        </datalist>
       </SettingItem>
       <SettingItem
         name="Open the created or updated note(s) after import"
@@ -221,6 +281,221 @@ function SettingsComponent({
           }}
           className={`checkbox-container${concat ? ' is-enabled' : ''}`}
         />
+      </SettingItem>
+      <SettingItem name="Managed Zotero Properties" isHeading />
+      <SettingItem
+        name="Preserved properties"
+        description="Frontmatter properties that should keep hand-edited values during re-imports. Use one property per line."
+      >
+        <textarea
+          spellCheck={false}
+          rows={6}
+          defaultValue={formatLineInput(settings.zoteroPreservedProperties)}
+          onChange={(e) =>
+            updateSetting(
+              'zoteroPreservedProperties',
+              splitLineInput((e.target as HTMLTextAreaElement).value)
+            )
+          }
+        />
+      </SettingItem>
+      <SettingItem
+        name="Annotation task colors"
+        description="Zotero annotation colors that should mark a paper as having follow-up work."
+      >
+        <div className="zt-managed-color-list">
+          {ZOTERO_ANNOTATION_COLORS.map((color) => {
+            const isEnabled = taskAnnotationColors.includes(color);
+
+            return (
+              <button
+                key={color}
+                type="button"
+                className={`zt-managed-color-button${
+                  isEnabled ? ' is-active' : ''
+                }`}
+                onClick={() => {
+                  setTaskAnnotationColors((state) => {
+                    const next = state.includes(color)
+                      ? state.filter((item) => item !== color)
+                      : [...state, color];
+                    updateSetting('zoteroTaskAnnotationColors', next);
+                    return next;
+                  });
+                }}
+              >
+                <span
+                  className="zt-managed-color-chip"
+                  style={{
+                    backgroundColor: ZOTERO_ANNOTATION_COLOR_HEX[color],
+                  }}
+                />
+                {color}
+              </button>
+            );
+          })}
+        </div>
+      </SettingItem>
+      <SettingItem name="Zotero Monitor" isHeading />
+      <SettingItem
+        name="Enable Zotero monitor"
+        description="Check Zotero for recently added citekeyed items that are missing Obsidian literature-note properties."
+      >
+        <div
+          onClick={() => {
+            setZoteroMonitorEnabled((state) => {
+              updateSetting('zoteroMonitorEnabled', !state);
+              return !state;
+            });
+          }}
+          className={`checkbox-container${
+            zoteroMonitorEnabled ? ' is-enabled' : ''
+          }`}
+        />
+      </SettingItem>
+      <SettingItem
+        name="Check when Obsidian starts"
+        description="Run the monitor after the workspace loads. The monitor must also be enabled."
+      >
+        <div
+          onClick={() => {
+            setZoteroMonitorStartup((state) => {
+              updateSetting('zoteroMonitorCheckOnStartup', !state);
+              return !state;
+            });
+          }}
+          className={`checkbox-container${
+            zoteroMonitorStartup ? ' is-enabled' : ''
+          }`}
+        />
+      </SettingItem>
+      <SettingItem
+        name="Check interval"
+        description="Minutes between automatic checks. Use 0 to disable recurring checks."
+      >
+        <input
+          min="0"
+          type="number"
+          defaultValue={settings.zoteroMonitorIntervalMinutes.toString()}
+          onChange={(e) =>
+            updateSetting(
+              'zoteroMonitorIntervalMinutes',
+              Number((e.target as HTMLInputElement).value)
+            )
+          }
+        />
+      </SettingItem>
+      <SettingItem
+        name="Automatic check behavior"
+        description="Choose what happens when a background check finds missing Zotero references."
+      >
+        <select
+          className="dropdown"
+          defaultValue={settings.zoteroMonitorAutomaticAction}
+          onChange={(e) =>
+            updateSetting(
+              'zoteroMonitorAutomaticAction',
+              (e.target as HTMLSelectElement).value as any
+            )
+          }
+        >
+          <option value="notice">Show notice</option>
+          <option value="modal">Open import modal</option>
+        </select>
+      </SettingItem>
+      <SettingItem
+        name="Recent Zotero items"
+        description="Only consider items added to Zotero within this many days. Leave blank for all time."
+      >
+        <input
+          min="0"
+          type="number"
+          placeholder="30"
+          defaultValue={settings.zoteroMonitorRecentDays?.toString() || ''}
+          onChange={(e) => {
+            const value = (e.target as HTMLInputElement).value;
+            updateSetting(
+              'zoteroMonitorRecentDays',
+              value === '' ? null : Number(value)
+            );
+          }}
+        />
+      </SettingItem>
+      <SettingItem
+        name="Libraries or groups"
+        description="Optional comma-separated Zotero library IDs or library/group names. Leave blank for all libraries."
+      >
+        <input
+          type="text"
+          spellCheck={false}
+          placeholder="1, My Group Library"
+          defaultValue={formatScopeInput(settings.zoteroMonitorLibraryScope)}
+          onChange={(e) =>
+            updateSetting(
+              'zoteroMonitorLibraryScope',
+              splitScopeInput((e.target as HTMLInputElement).value)
+            )
+          }
+        />
+      </SettingItem>
+      <SettingItem
+        name="Collection paths"
+        description="Optional comma-separated exact Zotero collection paths, such as Reading/Queue."
+      >
+        <input
+          type="text"
+          spellCheck={false}
+          placeholder="Reading/Queue"
+          defaultValue={formatScopeInput(settings.zoteroMonitorCollectionScope)}
+          onChange={(e) =>
+            updateSetting(
+              'zoteroMonitorCollectionScope',
+              splitScopeInput((e.target as HTMLInputElement).value)
+            )
+          }
+        />
+      </SettingItem>
+      <SettingItem
+        name="Tags"
+        description="Optional comma-separated exact Zotero tags. Leave blank for all tags."
+      >
+        <input
+          type="text"
+          spellCheck={false}
+          placeholder="to-read, paper"
+          defaultValue={formatScopeInput(settings.zoteroMonitorTagScope)}
+          onChange={(e) =>
+            updateSetting(
+              'zoteroMonitorTagScope',
+              splitScopeInput((e.target as HTMLInputElement).value)
+            )
+          }
+        />
+      </SettingItem>
+      <SettingItem
+        name="Monitor import format"
+        description="Import format used when importing selected missing items."
+      >
+        <select
+          className="dropdown"
+          defaultValue={settings.zoteroMonitorImportFormat || ''}
+          onChange={(e) =>
+            updateSetting(
+              'zoteroMonitorImportFormat',
+              (e.target as HTMLSelectElement).value
+            )
+          }
+        >
+          <option value="">First import format</option>
+          {exportFormatState.map((format, index) => (
+            <option key={index} value={format.name}>
+              {format.name}
+            </option>
+          ))}
+        </select>
+      </SettingItem>
+      <SettingItem name="Check Zotero now">
+        <button onClick={runZoteroMonitorCheck}>Check now</button>
       </SettingItem>
       <SettingItem name="Citation Formats" isHeading />
       <SettingItem>
@@ -483,6 +758,7 @@ export class ZoteroConnectorSettingsTab extends PluginSettingTab {
         updateExportFormat={this.updateExportFormat}
         removeExportFormat={this.removeExportFormat}
         updateSetting={this.updateSetting}
+        runZoteroMonitorCheck={this.runZoteroMonitorCheck}
       />,
       this.containerEl
     );
@@ -544,6 +820,10 @@ export class ZoteroConnectorSettingsTab extends PluginSettingTab {
   ) => {
     this.plugin.settings[key] = value;
     this.debouncedSave();
+  };
+
+  runZoteroMonitorCheck = () => {
+    this.plugin.zoteroMonitor.runManualCheck();
   };
 
   debouncedSave() {

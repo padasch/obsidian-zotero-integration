@@ -1,17 +1,12 @@
 import React from 'react';
-import { SingleValue } from 'react-select';
-import AsyncSelect from 'react-select/async';
 
 import { ExportFormat } from '../types';
 import { Icon } from './Icon';
-import { cslListRaw } from './cslList';
 import {
-  NoFileOptionMessage,
-  NoOptionMessage,
-  buildFileSearch,
-  buildLoadFileOptions,
-  customSelectStyles,
-  loadCSLOptions,
+  filterFinderOptions,
+  getMarkdownFileOptions,
+  searchCSLOptions,
+  useStableDatalistId,
 } from './select.helpers';
 
 interface FormatSettingsProps {
@@ -27,29 +22,28 @@ export function ExportFormatSettings({
   updateFormat,
   removeFormat,
 }: FormatSettingsProps) {
-  const loadFileOptions = React.useMemo(() => {
-    const fileSearch = buildFileSearch();
-    return buildLoadFileOptions(fileSearch);
-  }, []);
+  const markdownFileOptions = React.useMemo(() => getMarkdownFileOptions(), []);
 
-  const defaultTemplate = React.useMemo(() => {
-    if (!format.templatePath) return undefined;
+  const [templatePath, setTemplatePath] = React.useState(format.templatePath || '');
+  const [cslStyle, setCslStyle] = React.useState(format.cslStyle || '');
 
-    const file = app.vault
-      .getMarkdownFiles()
-      .find((item) => item.path === format.templatePath);
-    return file ? { value: file.path, label: file.path } : undefined;
+  React.useEffect(() => {
+    setTemplatePath(format.templatePath || '');
   }, [format.templatePath]);
 
-  const defaultStyle = React.useMemo(() => {
-    if (!format.cslStyle) return undefined;
-
-    const match = cslListRaw.find((item) => item.value === format.cslStyle);
-
-    if (match) return match;
-
-    return { label: format.cslStyle, value: format.cslStyle };
+  React.useEffect(() => {
+    setCslStyle(format.cslStyle || '');
   }, [format.cslStyle]);
+
+  const templateDatalistId = useStableDatalistId('zt-export-template');
+  const cslDatalistId = useStableDatalistId('zt-export-bibliography-style');
+
+  const templateOptions = React.useMemo(
+    () => filterFinderOptions(templatePath, markdownFileOptions),
+    [templatePath, markdownFileOptions]
+  );
+
+  const cslOptions = React.useMemo(() => searchCSLOptions(cslStyle), [cslStyle]);
 
   const onChangeStr = React.useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -64,20 +58,24 @@ export function ExportFormatSettings({
   );
 
   const onChangeCSLStyle = React.useCallback(
-    (e: SingleValue<{ value: string; label: string }>) => {
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      setCslStyle(value);
       updateFormat(index, {
         ...format,
-        cslStyle: e?.value,
+        cslStyle: value || undefined,
       });
     },
     [updateFormat, index, format]
   );
 
   const onChangeTemplatePath = React.useCallback(
-    (e: SingleValue<{ value: string; label: string }>) => {
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      setTemplatePath(value);
       updateFormat(index, {
         ...format,
-        templatePath: e?.value,
+        templatePath: value || undefined,
       });
     },
     [updateFormat, index, format]
@@ -163,17 +161,18 @@ export function ExportFormatSettings({
       <div className="zt-format__form">
         <div className="zt-format__label">Template File</div>
         <div className="zt-format__input-wrapper">
-          <AsyncSelect
-            noOptionsMessage={NoFileOptionMessage}
-            placeholder="Search..."
-            cacheOptions
-            defaultValue={defaultTemplate}
-            className="zt-multiselect"
-            loadOptions={loadFileOptions}
-            isClearable
+          <input
+            type="text"
+            placeholder="Search markdown files"
+            list={templateDatalistId}
+            value={templatePath}
             onChange={onChangeTemplatePath}
-            styles={customSelectStyles}
           />
+          <datalist id={templateDatalistId}>
+            {templateOptions.map((option) => (
+              <option key={option.value} value={option.value} />
+            ))}
+          </datalist>
         </div>
         <div className="zt-format__input-note">
           Open the data explorer from the command pallet to see available
@@ -299,17 +298,20 @@ export function ExportFormatSettings({
       <div className="zt-format__form">
         <div className="zt-format__label">Bibliography Style</div>
         <div className="zt-format__input-wrapper">
-          <AsyncSelect
-            noOptionsMessage={NoOptionMessage}
-            placeholder="Search..."
-            cacheOptions
-            defaultValue={defaultStyle}
-            className="zt-multiselect"
-            loadOptions={loadCSLOptions}
-            isClearable
+          <input
+            type="text"
+            placeholder="Type style name"
+            list={cslDatalistId}
+            value={cslStyle}
             onChange={onChangeCSLStyle}
-            styles={customSelectStyles}
           />
+          <datalist id={cslDatalistId}>
+            {cslOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </datalist>
         </div>
         <div className="zt-format__input-note">
           Note, the chosen style must be installed in Zotero. See{' '}

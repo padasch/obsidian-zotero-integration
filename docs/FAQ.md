@@ -9,6 +9,7 @@ There can be multiple reason for imports to fail.
 - Please double check your template to see if there is some typo.
 - Use the plugins Data Explorer and check the raw data received from Zotero. This data is used then by the template to extract & format the information.
 - Please also check also the FAQ entry "My import doesn't see any annotations"
+- Report plugin issues here: https://github.com/padasch/obsidian-zotero-integration/issues
 
 
 ## Does the Bibliography Style need to be set/activated on the Zotero side, too?
@@ -29,14 +30,12 @@ In the past you had to extract annotations in Zotero into its own note. This is 
 ### But it might be easier to extract annotations first
 The easiest way is to extract annotations in Zotero first and then use the "Insert notes into current document". Example import:
 
-<img src="https://raw.githubusercontent.com/mgmeyers/obsidian-zotero-integration/main/screenshots/demo.gif" alt="A short gif demonstraiting importing notes form Zotero into the current file">
-
 Importing via "Insert notes into your current document" will loose you the annotation color and any images/blocks you marked. This might not be desireable, but you no longer need to setup your own import template.
 
 
 ## My import doesn't see any annotations / doesn't import any images
 
-There might be a bug in Bibtex or the Zotero Integration plugin. Zotero has the annotation but its not seen in Obsidian. Please reference https://github.com/mgmeyers/obsidian-zotero-integration/issues/107
+There may be a bug in Zotero extraction flow. Zotero has the annotation but it is not seen in Obsidian. Please report at https://github.com/padasch/obsidian-zotero-integration/issues.
 
 You can export the PDF annotation in Zotero directly into a note. Downside is that you will loose images, links of the location and coloring of the note.
 

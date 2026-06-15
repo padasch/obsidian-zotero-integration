@@ -1,15 +1,13 @@
 import React, { ChangeEvent } from 'react';
-import { SingleValue } from 'react-select';
-import AsyncSelect from 'react-select/async';
 
 import { CitationFormat, Format } from '../types';
 import { Icon } from './Icon';
-import { cslListRaw } from './cslList';
 import {
-  NoOptionMessage,
-  customSelectStyles,
-  loadCSLOptions,
+  searchCSLOptions,
+  useStableDatalistId,
+  filterFinderOptions,
 } from './select.helpers';
+import { cslListRaw } from './cslList';
 
 interface FormatSettingsProps {
   format: CitationFormat;
@@ -24,15 +22,20 @@ export function CiteFormatSettings({
   updateFormat,
   removeFormat,
 }: FormatSettingsProps) {
-  const defaultStyle = React.useMemo(() => {
-    if (!format.cslStyle) return undefined;
+  const [cslStyle, setCslStyle] = React.useState(format.cslStyle || '');
 
-    const match = cslListRaw.find((item) => item.value === format.cslStyle);
-
-    if (match) return match;
-
-    return { label: format.cslStyle, value: format.cslStyle };
+  React.useEffect(() => {
+    setCslStyle(format.cslStyle || '');
   }, [format.cslStyle]);
+
+  const cslDatalistId = useStableDatalistId('zt-citation-style');
+  const cslOptions = React.useMemo(
+    () =>
+      format.format === 'template' || format.format === 'formatted-bibliography'
+        ? filterFinderOptions(cslStyle, cslListRaw, 50)
+        : searchCSLOptions(cslStyle, 50),
+    [cslStyle, format.format]
+  );
 
   const onChangeName = React.useCallback(
     (e: ChangeEvent) => {
@@ -84,10 +87,12 @@ export function CiteFormatSettings({
   );
 
   const onChangeCSLStyle = React.useCallback(
-    (e: SingleValue<{ value: string; label: string }>) => {
+    (e: ChangeEvent) => {
+      const value = (e.target as HTMLInputElement).value;
+      setCslStyle(value);
       updateFormat(index, {
         ...format,
-        cslStyle: e?.value,
+        cslStyle: value || undefined,
       });
     },
     [updateFormat, index, format]
@@ -193,18 +198,21 @@ export function CiteFormatSettings({
               ? 'Bibliography Style'
               : 'Citation Style'}
           </div>
-          <div className="zt-format__input-wrapper">
-            <AsyncSelect
-              noOptionsMessage={NoOptionMessage}
-              placeholder="Search..."
-              cacheOptions
-              defaultValue={defaultStyle}
-              className="zt-multiselect"
-              loadOptions={loadCSLOptions}
-              isClearable
+        <div className="zt-format__input-wrapper">
+            <input
+              type="text"
+              placeholder="Type style name"
+              list={cslDatalistId}
+              value={cslStyle}
               onChange={onChangeCSLStyle}
-              styles={customSelectStyles}
             />
+            <datalist id={cslDatalistId}>
+              {cslOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </datalist>
           </div>
           <div className="zt-format__input-note">
             Note, the chosen style must be installed in Zotero. See{' '}

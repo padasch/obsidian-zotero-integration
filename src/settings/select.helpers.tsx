@@ -1,121 +1,109 @@
-import Fuse from 'fuse.js';
-import { TFile } from 'obsidian';
+import { TFolder } from 'obsidian';
 import React from 'react';
-import { StylesConfig } from 'react-select';
 
-import { cslList } from './cslList';
+import { cslList, cslListRaw } from './cslList';
 
-export const customSelectStyles: StylesConfig = {
-  input: (provided) => {
-    return {
-      ...provided,
-      color: 'var(--text-normal)',
-    };
-  },
-  singleValue: (provided) => {
-    return {
-      ...provided,
-      color: 'var(--text-normal)',
-    };
-  },
-  menu: (provided) => {
-    return {
-      ...provided,
-      backgroundColor: 'var(--background-modifier-form-field)',
-      color: 'var(--text-normal)',
-    };
-  },
-  option: (provided, { isFocused, isSelected }) => {
-    return {
-      ...provided,
-      backgroundColor: isFocused
-        ? `var(--interactive-accent)`
-        : isSelected
-        ? `var(--background-modifier-hover)`
-        : undefined,
-      color: isFocused ? `var(--text-on-accent)` : 'var(--text-normal)',
-    };
-  },
-  control: (provided, state) => {
-    return {
-      ...provided,
-      backgroundColor: 'var(--background-modifier-form-field)',
-      color: 'var(--text-normal)',
-      borderColor: state.isFocused
-        ? 'var(--interactive-accent)'
-        : 'var(--background-modifier-border)',
-      boxShadow: state.isFocused
-        ? '0 0 0 1px var(--interactive-accent)'
-        : 'none',
-      ':hover': {
-        borderColor: state.isFocused
-          ? 'var(--interactive-accent)'
-          : 'var(--background-modifier-border)',
-      },
-    };
-  },
+export type FinderOption = {
+  value: string;
+  label: string;
 };
 
-export function searchCSL(inputValue: string) {
-  return cslList.search(inputValue).map((res) => res.item);
+export function normalizeFinderQuery(query: string): string {
+  return (query || '').trim();
 }
 
-let loadCSLOptionsDB = 0;
+export function filterFinderOptions(
+  query: string,
+  options: FinderOption[],
+  limit = 50
+): FinderOption[] {
+  const normalized = normalizeFinderQuery(query).toLocaleLowerCase();
+  if (!normalized) return [];
 
-export function loadCSLOptions(
-  inputValue: string,
-  callback: (options: Array<{ value: string; label: string }>) => void
-) {
-  if (inputValue === '') {
-    callback([]);
-  } else {
-    clearTimeout(loadCSLOptionsDB);
-    loadCSLOptionsDB = activeWindow.setTimeout(() => {
-      callback([
-        { value: inputValue, label: inputValue },
-        ...searchCSL(inputValue),
-      ]);
-    }, 150);
-  }
-}
+  const startsWith: FinderOption[] = [];
+  const contains: FinderOption[] = [];
 
-export function NoOptionMessage() {
-  return <span>Type to search CSL styles</span>;
-}
+  for (const option of options) {
+    const lowerLabel = option.label.toLocaleLowerCase();
+    const lowerValue = option.value.toLocaleLowerCase();
 
-export function NoFileOptionMessage() {
-  return <span>Type to search</span>;
-}
-
-export function buildFileSearch() {
-  const files = app.vault.getMarkdownFiles();
-  return new Fuse(files, {
-    keys: ['basename'],
-    minMatchCharLength: 2,
-  });
-}
-
-let fileSearchDB = 0;
-
-export const buildLoadFileOptions =
-  (search: Fuse<TFile>) =>
-  (
-    inputValue: string,
-    callback: (options: Array<{ value: string; label: string }>) => void
-  ) => {
-    if (inputValue === '') {
-      callback([]);
-    } else {
-      clearTimeout(fileSearchDB);
-      fileSearchDB = activeWindow.setTimeout(() => {
-        callback(
-          search.search(inputValue).map((res) => {
-            return {
-              value: res.item.path,
-              label: res.item.path,
-            };
-          })
-        );
-      }, 150);
+    if (lowerLabel.startsWith(normalized) || lowerValue.startsWith(normalized)) {
+      startsWith.push(option);
+    } else if (
+      lowerLabel.includes(normalized) ||
+      lowerValue.includes(normalized)
+    ) {
+      contains.push(option);
     }
-  };
+  }
+
+  const matched = [...startsWith, ...contains];
+  const values = new Set<string>();
+
+  const unique = matched.filter((option) => {
+    if (values.has(option.value)) return false;
+    values.add(option.value);
+    return true;
+  });
+
+  if (
+    !values.has(query) &&
+    !values.has(normalized) &&
+    !unique.some((option) => option.value === query)
+  ) {
+    unique.unshift({
+      value: query,
+      label: query,
+    });
+  }
+
+  return unique.slice(0, limit);
+}
+
+export function getMarkdownFileOptions(): FinderOption[] {
+  return app.vault
+    .getMarkdownFiles()
+    .map((file) => ({ value: file.path, label: file.path }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export function getFolderOptions(): FinderOption[] {
+  return app.vault
+    .getAllLoadedFiles()
+    .filter((file): file is TFolder => file instanceof TFolder)
+    .filter((folder) => folder.path !== '/')
+    .map((folder) => ({ value: folder.path, label: folder.path }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function searchCSLByText(query: string) {
+  const normalized = normalizeFinderQuery(query);
+  if (!normalized) return [];
+
+  if (normalized.length < 3) {
+    return cslListRaw.filter((item) => {
+      const haystack = `${item.value} ${item.label}`.toLocaleLowerCase();
+      return haystack.includes(normalized.toLocaleLowerCase());
+    });
+  }
+
+  return cslList.search(normalized).map((entry) => entry.item);
+}
+
+export function searchCSLOptions(query: string, limit = 50): FinderOption[] {
+  const matches = searchCSLByText(query);
+  return filterFinderOptions(
+    normalizeFinderQuery(query),
+    matches.map((entry) => ({
+      value: entry.value,
+      label: entry.label,
+    })),
+    limit
+  );
+}
+
+export function useStableDatalistId(prefix: string) {
+  return React.useMemo(() => `${prefix}-${Math.random().toString(36).slice(2)}`, [
+    prefix,
+  ]);
+}

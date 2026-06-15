@@ -1,34 +1,30 @@
-## Obsidian Zotero Integration
+# Obsidian Zotero Integration
 
-Insert and import citations, bibliographies, notes, and PDF annotations from Zotero into Obsidian. Requires the [Better BibTeX for Zotero](https://retorque.re/zotero-better-bibtex/installation/) plugin.
+Insert and import citations, bibliographies, notes, and PDF annotations from Zotero into Obsidian. Requires [Better BibTeX for Zotero](https://retorque.re/zotero-better-bibtex/installation/).
 
-You can find the documentation for this plugin [here](https://github.com/mgmeyers/obsidian-zotero-integration/blob/main/docs/README.md). The documentation is currently incomplete. Please reach out if you'd like to help.
+This repository is maintained as a fork of [peterxcli/obsidian-zotero-integration](https://github.com/peterxcli/obsidian-zotero-integration).  
+The code has since been cleaned up and extended with AI-assisted development in this branch.
+
+## ⚠️ Backup first
+
+Before installing or updating, create a backup of your Obsidian vault and plugin settings.
+
+## Documentation
+
+Project documentation is maintained in [docs/README.md](docs/README.md).
 
 ## Help, how do I install the plugin?
 
-In Obsidian, open Settings, on the left under Options open Community Plugins, on Community Plugins select Browse and search for 'Zotero Integration'
+In Obsidian:
 
-## Help, the plugin doesn't load!
+1. Open **Settings → Community plugins**
+2. Disable safe mode
+3. Browse community plugins and search for "Zotero Integration"
 
-Please insure your Obsidian installer version is at least `v0.13.24`. If not, try reinstalling obsidian.
+## Help, the plugin doesn't load
 
-## Help, I get an error when creating a citation or bibliography!
+Make sure you are running a supported Obsidian version.
 
-Please ensure you have selected a quick copy style in Zotero:
+## Help, I get an error when creating a citation or bibliography
 
-<img src="https://raw.githubusercontent.com/mgmeyers/obsidian-zotero-integration/main/screenshots/04.png" alt="A screenshot Zotero's quick copy settings">
-
-And that you can copy a citation in Zotero when and item is selected:
-
-<img src="https://raw.githubusercontent.com/mgmeyers/obsidian-zotero-integration/main/screenshots/05.png" alt="A screenshot Zotero's edit menu showing the copy citation option">
-
-
-## Screenshots
-
-<img src="https://raw.githubusercontent.com/mgmeyers/obsidian-zotero-integration/main/screenshots/01.png" alt="A screenshot of this plugin's settings">
-
-<img src="https://raw.githubusercontent.com/mgmeyers/obsidian-zotero-integration/main/screenshots/02.png" alt="A screenshot of available plugin commands">
-
-<img src="https://raw.githubusercontent.com/mgmeyers/obsidian-zotero-integration/main/screenshots/03.png" alt="A screenshot of the Zotero search bar">
-
-<img src="https://raw.githubusercontent.com/mgmeyers/obsidian-zotero-integration/main/screenshots/demo.gif" alt="A short gif demonstraiting importing notes form Zotero into the current file">
+Ensure a citation/csl style is available in Zotero and that a valid quick-copy style is configured there.
