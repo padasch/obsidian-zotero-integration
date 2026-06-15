@@ -158,6 +158,140 @@
   --callout-color: 170, 170, 170;
 }
 
+.zt-multiselect {
+  max-width: 520px;
+  position: relative;
+  text-align: left;
+  width: 100%;
+}
+
+.zt-multiselect:focus-within {
+  z-index: 20;
+}
+
+.zt-multiselect *,
+.zt-select__menu-portal * {
+  box-sizing: border-box;
+}
+
+.zt-multiselect [aria-live],
+.zt-multiselect [id$='-live-region'],
+.zt-select__a11yText {
+  border: 0 !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  height: 1px !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  position: absolute !important;
+  white-space: nowrap !important;
+  width: 1px !important;
+}
+
+.zt-multiselect input {
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.zt-select__control {
+  align-items: center !important;
+  background-color: var(--background-modifier-form-field) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  border-radius: var(--radius-s) !important;
+  cursor: text !important;
+  display: flex !important;
+  min-height: 36px !important;
+}
+
+.zt-select__control--is-focused {
+  border-color: var(--interactive-accent) !important;
+  box-shadow: 0 0 0 1px var(--interactive-accent) !important;
+}
+
+.zt-select__value-container {
+  align-items: center !important;
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-wrap: wrap !important;
+  gap: 2px !important;
+  overflow: hidden !important;
+  padding: 2px 8px !important;
+}
+
+.zt-select__input-container,
+.zt-select__placeholder,
+.zt-select__single-value {
+  color: var(--text-normal) !important;
+  margin: 0 !important;
+}
+
+.zt-select__placeholder {
+  color: var(--text-faint) !important;
+}
+
+.zt-select__indicators {
+  align-items: center !important;
+  align-self: stretch !important;
+  display: flex !important;
+  flex-shrink: 0 !important;
+}
+
+.zt-select__indicator {
+  color: var(--text-muted) !important;
+  display: flex !important;
+  padding: 6px !important;
+}
+
+.zt-select__indicator-separator {
+  align-self: stretch !important;
+  background-color: var(--background-modifier-border) !important;
+  margin-bottom: 6px !important;
+  margin-top: 6px !important;
+  width: 1px !important;
+}
+
+.zt-select__menu-portal {
+  z-index: 10000 !important;
+}
+
+.zt-select__menu {
+  background-color: var(--background-primary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  border-radius: var(--radius-s) !important;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%) !important;
+  color: var(--text-normal) !important;
+  margin: 4px 0 !important;
+  overflow: hidden !important;
+  z-index: 10000 !important;
+}
+
+.zt-select__menu-list {
+  max-height: 260px !important;
+  overflow-y: auto !important;
+  padding: 4px !important;
+}
+
+.zt-select__option,
+.zt-select__no-options-message,
+.zt-select__loading-message {
+  border-radius: var(--radius-s) !important;
+  color: var(--text-normal) !important;
+  display: block !important;
+  font-size: var(--font-ui-small) !important;
+  line-height: 1.35 !important;
+  padding: 6px 8px !important;
+}
+
+.zt-select__option--is-focused {
+  background-color: var(--interactive-accent) !important;
+  color: var(--text-on-accent) !important;
+}
+
+.zt-select__option--is-selected {
+  background-color: var(--background-modifier-hover) !important;
+}
+
 .zt-format__input-note {
   font-style: italic;
   font-size: 0.9em;
@@ -338,20 +472,6 @@
   max-width: 100%;
   overflow-wrap: anywhere;
   padding: 0.25rem 0.5rem;
-}
-
-.zt-monitor-notice-message {
-  margin-bottom: 0.35rem;
-}
-
-.zt-monitor-notice-actions {
-  display: flex;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-}
-
-.zt-monitor-notice-actions button {
-  margin: 0;
 }
 
 .zt-monitor-toolbar {

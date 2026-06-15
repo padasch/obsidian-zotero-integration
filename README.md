@@ -14,6 +14,10 @@ Before installing or updating, create a backup of your Obsidian vault and plugin
 - Persistent monitor notifications for newly found references, with one-click import actions.
 - Tidy documentation and maintenance-focused cleanup.
 
+## Current release
+
+- Version `3.2.5` includes all settings simplification, monitor actions, and documentation cleanup changes.
+
 ## Documentation
 
 Project documentation is maintained in [docs/README.md](docs/README.md).

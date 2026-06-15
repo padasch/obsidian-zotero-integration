@@ -167,7 +167,7 @@ export function CiteFormatSettings({
             Citation templates have access to a subset of the Zotero item's
             data. The item's first attachement is available under the{' '}
             <pre>attachment</pre> key. Annotations are not provided. Open the
-            data explorer from the command pallet to see available template
+            data explorer from the command palette to see available template
             data. Templates are written using{' '}
             <a
               href="https://mozilla.github.io/nunjucks/templating.html#variables"
@@ -178,7 +178,7 @@ export function CiteFormatSettings({
             </a>
             .{' '}
             <a
-              href="https://github.com/mgmeyers/obsidian-zotero-integration/blob/main/docs/Templating.md"
+              href="https://github.com/padasch/obsidian-zotero-integration/blob/main/docs/Templating.md"
               target="_blank"
               rel="noreferrer"
             >
@@ -189,7 +189,7 @@ export function CiteFormatSettings({
         </div>
       )}
 
-      {['formatted-citation', 'formatted-bibliography', 'template'].contains(
+      {['formatted-citation', 'formatted-bibliography', 'template'].includes(
         format.format
       ) && (
         <div className="zt-format__form">
@@ -198,7 +198,7 @@ export function CiteFormatSettings({
               ? 'Bibliography Style'
               : 'Citation Style'}
           </div>
-        <div className="zt-format__input-wrapper">
+          <div className="zt-format__input-wrapper">
             <input
               type="text"
               placeholder="Type style name"
@@ -227,7 +227,7 @@ export function CiteFormatSettings({
         </div>
       )}
 
-      {['latex', 'biblatex'].contains(format.format) && (
+      {['latex', 'biblatex'].includes(format.format) && (
         <div className="zt-format__form">
           <div className="zt-format__label">Citation Command</div>
           <div className="zt-format__input-wrapper">

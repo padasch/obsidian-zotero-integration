@@ -14,7 +14,6 @@ Previously, this plugin used three different template files. For the sake of thi
 
 You can view the data available to templates using the `Data Explorer` command in Obsidian's command palette.
 
-![](Screen%20Shot%202022-03-28%20at%2011.11.24%20AM.png)
 
 ## What templating language do I use?
 
@@ -56,14 +55,12 @@ Please see the [Nunjucks docs](https://mozilla.github.io/nunjucks/templating.htm
 
 Templates can reside anywhere in your Obsidian vault. The path to the template is supplied in the import settings.
 
-![](Screen%20Shot%202022-04-23%20at%2010.54.56%20AM.png)
 
 
 ## How do I format lists of data?
 
 In the data explorer, you'll notice that annotations, tags, creators, and other values look something like:
 
-![](Screen%20Shot%202022-04-09%20at%206.07.10%20PM.png)
 
 The square brackets next to `annotations` mean that this is a list of annotations. To format a list you can use a `for` loop ([see the docs here](https://mozilla.github.io/nunjucks/templating.html#for)). It looks like:
 
@@ -105,7 +102,6 @@ Here, `a` is the current annotation and `annotatedText` is one field of this ann
 
 Finally, there are special values that nunjucks provides. For example `loop.first` and `loop.last` will tell you if you are on the first item in a list or the last item. This can be useful if you're delimiting items in a list. Take tags, for example.
 
-![](Screen%20Shot%202022-04-09%20at%206.22.35%20PM.png)
 
 ```
 {% for t in tags %}{{t.tag}}{% if not loop.last %}, {% endif %}{% endfor %}
@@ -261,6 +257,5 @@ It can be invaluable in complex scenarios where you need to change one annotatio
 ```
 
 An example of highlighting a text fragment within the text and the same fragment in the exported note:
-![](Text%20Annotation%20Example.png)
 
 > other expressions circulated at the time, from the [[sociology of translation]], to the [[anthropology of science and technology,]] to the [[sociology of mediation,]] marking the plural and fluctuating character of the intellectual project(s).

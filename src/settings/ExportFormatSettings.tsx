@@ -175,7 +175,7 @@ export function ExportFormatSettings({
           </datalist>
         </div>
         <div className="zt-format__input-note">
-          Open the data explorer from the command pallet to see available
+          Open the data explorer from the command palette to see available
           template data. Templates are written using{' '}
           <a
             href="https://mozilla.github.io/nunjucks/templating.html#variables"
@@ -186,7 +186,7 @@ export function ExportFormatSettings({
           </a>
           .{' '}
           <a
-            href="https://github.com/mgmeyers/obsidian-zotero-integration/blob/main/docs/Templating.md"
+            href="https://github.com/padasch/obsidian-zotero-integration/blob/main/docs/Templating.md"
             target="_blank"
             rel="noreferrer"
           >
@@ -218,7 +218,7 @@ export function ExportFormatSettings({
           <div className="zt-format__input-note">
             Deprecated: Separate template files are no longer needed.{' '}
             <a
-              href="https://github.com/mgmeyers/obsidian-zotero-integration/blob/main/docs/Templating.md"
+              href="https://github.com/padasch/obsidian-zotero-integration/blob/main/docs/Templating.md"
               target="_blank"
               rel="noreferrer"
             >
@@ -251,7 +251,7 @@ export function ExportFormatSettings({
           <div className="zt-format__input-note">
             Deprecated: Separate template files are no longer needed.{' '}
             <a
-              href="https://github.com/mgmeyers/obsidian-zotero-integration/blob/main/docs/Templating.md"
+              href="https://github.com/padasch/obsidian-zotero-integration/blob/main/docs/Templating.md"
               target="_blank"
               rel="noreferrer"
             >
@@ -284,7 +284,7 @@ export function ExportFormatSettings({
           <div className="zt-format__input-note">
             Deprecated: Separate template files are no longer needed.{' '}
             <a
-              href="https://github.com/mgmeyers/obsidian-zotero-integration/blob/main/docs/Templating.md"
+              href="https://github.com/padasch/obsidian-zotero-integration/blob/main/docs/Templating.md"
               target="_blank"
               rel="noreferrer"
             >

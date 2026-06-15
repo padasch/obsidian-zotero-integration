@@ -20,5 +20,3 @@ Please [file an issue](https://github.com/padasch/obsidian-zotero-integration/is
 ## How do I export images from PDFs
 
 Rectangle annotations will be converted to images and saved in the `Image Output Path` set under `Export Formats`.
-
-![](Screen%20Shot%202022-03-28%20at%2011.02.59%20AM.png)

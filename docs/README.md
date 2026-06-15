@@ -16,3 +16,5 @@ Always back up your Obsidian vault and plugin settings before installing or test
 
 - Template path and bibliography style fields now support native Obsidian folder/file finders.
 - The monitor uses persistent notices for new references and supports **Open Import**, **Background Import**, and **Ignore** actions.
+
+No screenshot assets are required for this repo; documentation now uses configuration guidance only.
