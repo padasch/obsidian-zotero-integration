@@ -4,7 +4,7 @@ Export formats define how data from Zotero should be exported and converted to m
 
 ### Output path
 
-The output path is where the exported markdown should be saved within your vault. Output paths support templating. You can view the data available to templates using the `Data Explorer` command in Obsidian's command pallette.
+The output path is where the exported markdown should be saved within your vault. Output paths support templating. You can view the data available to templates using the `Data Explorer` command in Obsidian's command palette.
 
 ### Image output path
 

@@ -12,7 +12,7 @@ Previously, this plugin used three different template files. For the sake of thi
 
 ## What data is available to templates?
 
-You can view the data available to templates using the `Data Explorer` command in Obsidian's command pallette.
+You can view the data available to templates using the `Data Explorer` command in Obsidian's command palette.
 
 ![](Screen%20Shot%202022-03-28%20at%2011.11.24%20AM.png)
 
@@ -65,7 +65,7 @@ In the data explorer, you'll notice that annotations, tags, creators, and other 
 
 ![](Screen%20Shot%202022-04-09%20at%206.07.10%20PM.png)
 
-The square brackets next to `annotations` here means that this is a list of annotations. To format a list you can use what's called a `for` loop ([see the docs on this here](https://mozilla.github.io/nunjucks/templating.html#for)). Which looks like:
+The square brackets next to `annotations` mean that this is a list of annotations. To format a list you can use a `for` loop ([see the docs here](https://mozilla.github.io/nunjucks/templating.html#for)). It looks like:
 
 ```
 {% for annotation in annotations %}
@@ -264,4 +264,3 @@ An example of highlighting a text fragment within the text and the same fragment
 ![](Text%20Annotation%20Example.png)
 
 > other expressions circulated at the time, from the [[sociology of translation]], to the [[anthropology of science and technology,]] to the [[sociology of mediation,]] marking the plural and fluctuating character of the intellectual project(s).
-

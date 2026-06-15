@@ -1,10 +1,18 @@
 ## Obsidian Zotero Integration Documentation
 
+This fork is maintained from [peterxcli/obsidian-zotero-integration](https://github.com/peterxcli/obsidian-zotero-integration), with cleanup and AI-assisted improvements.
+
 - [FAQ](FAQ.md)
 - [PDF Annotations](PDF%20Annotations.md)
 - [Templating](Templating.md)
 - [Export Settings](Export%20Settings.md)
+- [Release history](https://github.com/padasch/obsidian-zotero-integration/releases)
 
-This documentation is for a maintained fork based on [peterxcli/obsidian-zotero-integration](https://github.com/peterxcli/obsidian-zotero-integration).
+## Before you start
 
-Before installing or testing plugin changes, always keep a backup of your vault and plugin settings.
+Always back up your Obsidian vault and plugin settings before installing or testing plugin changes.
+
+## Notable behavior in this fork
+
+- Template path and bibliography style fields now support native Obsidian folder/file finders.
+- The monitor uses persistent notices for new references and supports **Open Import**, **Background Import**, and **Ignore** actions.
