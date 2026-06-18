@@ -1,3 +1,8 @@
+* 3.2.12
+  - Allowed selecting or deselecting missing-reference rows by clicking anywhere on the table row.
+  - Preserved normal click behavior for checkboxes, links, buttons, and form controls inside the row.
+  - Added keyboard row toggling with Enter or Space and a visible focus outline.
+
 * 3.2.11
   - Added a monitor setting to choose which columns appear in the missing-reference import modal.
   - Changed the default missing-reference table to show **Title**, **Citekey**, **Added**, **Tags**, and **Collections**.

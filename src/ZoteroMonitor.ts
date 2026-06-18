@@ -152,6 +152,13 @@ function getBestPaperLink(item: ZoteroMonitorItem): PaperLink {
   };
 }
 
+function shouldIgnoreRowSelectionClick(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    !!target.closest('a, button, input, label, select, textarea')
+  );
+}
+
 class ZoteroMissingItemsModal extends Modal {
   private selected = new Set<string>();
   private quickSelect: MonitorSelectionMode = 'today';
@@ -783,6 +790,7 @@ class ZoteroMissingItemsModal extends Modal {
       const key = itemIdentity(item);
       const row = body.createEl('tr');
       row.toggleClass('is-selected', this.selected.has(key));
+      row.tabIndex = 0;
 
       const checkboxCell = row.createEl('td', {
         cls: 'zt-monitor-table-check',
@@ -790,17 +798,34 @@ class ZoteroMissingItemsModal extends Modal {
       const checkbox = checkboxCell.createEl('input');
       checkbox.type = 'checkbox';
       checkbox.checked = this.selected.has(key);
-      checkbox.addEventListener('change', () => {
-        if (checkbox.checked) {
+      const setSelected = (selected: boolean) => {
+        checkbox.checked = selected;
+
+        if (selected) {
           this.selected.add(key);
         } else {
           this.selected.delete(key);
         }
 
         this.quickSelect = 'custom';
-        row.toggleClass('is-selected', checkbox.checked);
+        row.toggleClass('is-selected', selected);
         this.updateImportButtons();
         this.updateQuickSelectButtons();
+      };
+
+      checkbox.addEventListener('change', () => {
+        setSelected(checkbox.checked);
+      });
+      row.addEventListener('click', (event) => {
+        if (shouldIgnoreRowSelectionClick(event.target)) return;
+        setSelected(!checkbox.checked);
+      });
+      row.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        if (shouldIgnoreRowSelectionClick(event.target)) return;
+
+        event.preventDefault();
+        setSelected(!checkbox.checked);
       });
 
       for (const column of this.tableColumns) {
