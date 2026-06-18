@@ -14,7 +14,7 @@ Before installing/updating this plugin in your vault, make a backup of:
 
 ## Latest release
 
-Current plugin release: **3.2.12**.
+Current plugin release: **3.2.13**.
 
 ## Install
 
@@ -57,6 +57,7 @@ Current plugin release: **3.2.12**.
 - **Online paper links** in the missing-reference table, using DOI/publisher URL or a Scholar search fallback.
 - **Configurable missing-reference table columns** with separate tags and leaf collection path columns.
 - **Row-click selection** in the missing-reference table, while links and controls keep their normal behavior.
+- **Shift-click range selection** in the missing-reference table.
 - Cleaner and slimmer settings documentation and CSS cleanup, with legacy screenshot assets removed from the repository.
 
 ## Settings that matter most

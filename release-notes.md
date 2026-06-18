@@ -1,3 +1,8 @@
+* 3.2.13
+  - Added Shift-click range selection to the missing-reference table.
+  - Range selection uses the last normally clicked row as the anchor and selects all visible rows through the Shift-clicked row.
+  - Supported Shift-click range selection from row clicks and checkbox clicks.
+
 * 3.2.12
   - Allowed selecting or deselecting missing-reference rows by clicking anywhere on the table row.
   - Preserved normal click behavior for checkboxes, links, buttons, and form controls inside the row.

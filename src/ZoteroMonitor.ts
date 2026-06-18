@@ -161,6 +161,7 @@ function shouldIgnoreRowSelectionClick(target: EventTarget | null): boolean {
 
 class ZoteroMissingItemsModal extends Modal {
   private selected = new Set<string>();
+  private selectionAnchorKey: string | null = null;
   private quickSelect: MonitorSelectionMode = 'today';
   private searchTerm = '';
   private sortKey: MonitorSortKey = 'dateAdded';
@@ -373,6 +374,7 @@ class ZoteroMissingItemsModal extends Modal {
       const imported = new Set(selectedItems.map((item) => itemIdentity(item)));
       this.items = this.items.filter((item) => !imported.has(itemIdentity(item)));
       this.selected.clear();
+      this.selectionAnchorKey = null;
       this.quickSelect = 'custom';
       this.renderList();
 
@@ -617,6 +619,7 @@ class ZoteroMissingItemsModal extends Modal {
   private applyQuickSelection(mode: MonitorQuickSelect) {
     this.quickSelect = mode;
     this.selected.clear();
+    this.selectionAnchorKey = null;
 
     for (const item of this.items) {
       const key = itemIdentity(item);
@@ -630,6 +633,33 @@ class ZoteroMissingItemsModal extends Modal {
 
     this.renderList();
     this.updateQuickSelectButtons();
+  }
+
+  private selectRangeTo(
+    targetKey: string,
+    visibleItems: ZoteroMonitorItem[]
+  ): boolean {
+    if (!this.selectionAnchorKey) return false;
+
+    const anchorIndex = visibleItems.findIndex(
+      (item) => itemIdentity(item) === this.selectionAnchorKey
+    );
+    const targetIndex = visibleItems.findIndex(
+      (item) => itemIdentity(item) === targetKey
+    );
+
+    if (anchorIndex === -1 || targetIndex === -1) return false;
+
+    const start = Math.min(anchorIndex, targetIndex);
+    const end = Math.max(anchorIndex, targetIndex);
+
+    for (const item of visibleItems.slice(start, end + 1)) {
+      this.selected.add(itemIdentity(item));
+    }
+
+    this.quickSelect = 'custom';
+    this.renderList();
+    return true;
   }
 
   private renderColumnHeader(
@@ -798,7 +828,7 @@ class ZoteroMissingItemsModal extends Modal {
       const checkbox = checkboxCell.createEl('input');
       checkbox.type = 'checkbox';
       checkbox.checked = this.selected.has(key);
-      const setSelected = (selected: boolean) => {
+      const setSelected = (selected: boolean, updateAnchor = true) => {
         checkbox.checked = selected;
 
         if (selected) {
@@ -807,17 +837,35 @@ class ZoteroMissingItemsModal extends Modal {
           this.selected.delete(key);
         }
 
+        if (updateAnchor) {
+          this.selectionAnchorKey = key;
+        }
+
         this.quickSelect = 'custom';
         row.toggleClass('is-selected', selected);
         this.updateImportButtons();
         this.updateQuickSelectButtons();
       };
 
+      checkbox.addEventListener('click', (event) => {
+        if (!event.shiftKey) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        if (!this.selectRangeTo(key, filtered)) {
+          setSelected(true);
+        }
+      });
       checkbox.addEventListener('change', () => {
         setSelected(checkbox.checked);
       });
       row.addEventListener('click', (event) => {
         if (shouldIgnoreRowSelectionClick(event.target)) return;
+
+        if (event.shiftKey && this.selectRangeTo(key, filtered)) {
+          return;
+        }
+
         setSelected(!checkbox.checked);
       });
       row.addEventListener('keydown', (event) => {
@@ -825,6 +873,11 @@ class ZoteroMissingItemsModal extends Modal {
         if (shouldIgnoreRowSelectionClick(event.target)) return;
 
         event.preventDefault();
+
+        if (event.shiftKey && this.selectRangeTo(key, filtered)) {
+          return;
+        }
+
         setSelected(!checkbox.checked);
       });
 
