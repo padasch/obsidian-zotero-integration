@@ -1,3 +1,9 @@
+* 3.2.11
+  - Added a monitor setting to choose which columns appear in the missing-reference import modal.
+  - Changed the default missing-reference table to show **Title**, **Citekey**, **Added**, **Tags**, and **Collections**.
+  - Split tags and collections into separate table columns instead of the previous combined scope column.
+  - Normalized Zotero collection paths so only leaf collection paths are shown, for example `topics/coding/r` instead of `topics`, `topics/coding`, and `topics/coding/r`.
+
 * 3.2.10
   - Added a short-lived background cache for Zotero monitor item metadata so the missing-reference review does not rerun the full Zotero scan on every open.
   - Moved missing-reference modal actions into a visible top action bar with compact **Import & close** and **Import & continue** buttons.

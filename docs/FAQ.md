@@ -57,9 +57,14 @@ If the monitor is quiet, check monitor settings (`Monitor` section) for:
 
 Yes. Use **Open Import** from the monitor notice or **Check now** in settings. In the review modal:
 
-- **Import selected (...) and close** imports the selected references and closes the modal.
-- **Import selected (...) and continue** imports the selected references, removes them from the review list, and keeps the modal open so you can change project/topic/status/note fields for the next import.
+- **Import & close** imports the selected references and closes the modal.
+- **Import & continue** imports the selected references, removes them from the review list, and keeps the modal open so you can change project/topic/status/note fields for the next import.
 
+## Why does the missing-reference table only show one collection path?
+
+Zotero/Better BibTeX can return parent and child collection paths for the same item. The monitor now shows only the deepest collection path for display and search. For example, if Zotero reports `topics`, `topics/coding`, and `topics/coding/r`, the table shows `topics/coding/r`.
+
+You can choose which columns appear in the modal under **Settings -> Zotero Monitor -> Missing-reference table columns**.
 
 ## Unanswered questions
 - What is the difference between the various BibTeX and CSL-based configurations?

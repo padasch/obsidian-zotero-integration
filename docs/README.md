@@ -20,8 +20,9 @@ Back up your vault and plugin configuration before installing, upgrading, or exp
   - template file path
   - citation / bibliography style
 - Missing-reference review modal actions:
-  - Import selected and close
-  - Import selected and continue
+  - Import & close
+  - Import & continue
+- Configurable missing-reference table columns, with tags and leaf collection paths shown separately.
 - Persistent monitor notices for recently added references with quick actions:
   - Open Import
   - Background Import

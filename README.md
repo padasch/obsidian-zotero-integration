@@ -14,7 +14,7 @@ Before installing/updating this plugin in your vault, make a backup of:
 
 ## Latest release
 
-Current plugin release: **3.2.10**.
+Current plugin release: **3.2.11**.
 
 ## Install
 
@@ -51,10 +51,11 @@ Current plugin release: **3.2.10**.
   - `Background Import`
   - `Ignore`
 - **Multi-step missing-reference imports** in the review modal:
-  - `Import selected (...) and close`
-  - `Import selected (...) and continue`
+  - `Import & close`
+  - `Import & continue`
 - **Faster missing-reference review** through background Zotero metadata caching.
 - **Online paper links** in the missing-reference table, using DOI/publisher URL or a Scholar search fallback.
+- **Configurable missing-reference table columns** with separate tags and leaf collection path columns.
 - Cleaner and slimmer settings documentation and CSS cleanup, with legacy screenshot assets removed from the repository.
 
 ## Settings that matter most
@@ -67,7 +68,7 @@ The monitor watches for missing literature notes and can run:
 - on a recurring interval
 - manually via **Check Zotero now**
 
-You can control how many recent days it considers (`Recent Zotero items`), scope (library/collections/tags), and which import format should be used for automatic/background imports.
+You can control how many recent days it considers (`Recent Zotero items`), scope (library/collections/tags), which import format should be used for automatic/background imports, and which columns are shown in the missing-reference table.
 
 ### Default-style folder/file/style entry fields
 

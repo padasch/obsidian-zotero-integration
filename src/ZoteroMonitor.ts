@@ -7,7 +7,12 @@ import {
   ZoteroManagedUserProperties,
   ZoteroMonitorItem,
   ZoteroMonitorScope,
+  ZoteroMonitorTableColumn,
 } from './types';
+import {
+  normalizeMonitorTableColumns,
+  ZOTERO_MONITOR_TABLE_COLUMN_BY_KEY,
+} from './ZoteroMonitor.columns';
 import {
   filterItemsByRecentDays,
   filterItemsByScope,
@@ -32,13 +37,7 @@ const MONITOR_PRELOAD_DELAY_MS = 1500;
 type MonitorQuickSelect = 'none' | 'today' | 'all';
 type MonitorSelectionMode = MonitorQuickSelect | 'custom';
 type MonitorSortDirection = 'asc' | 'desc';
-type MonitorSortKey =
-  | 'title'
-  | 'citekey'
-  | 'library'
-  | 'dateModified'
-  | 'dateAdded'
-  | 'scopes';
+type MonitorSortKey = ZoteroMonitorTableColumn;
 type MonitorItemCache = {
   databaseKey: string;
   fetchedAt: number;
@@ -157,8 +156,9 @@ class ZoteroMissingItemsModal extends Modal {
   private selected = new Set<string>();
   private quickSelect: MonitorSelectionMode = 'today';
   private searchTerm = '';
-  private sortKey: MonitorSortKey = 'dateModified';
+  private sortKey: MonitorSortKey = 'dateAdded';
   private sortDirection: MonitorSortDirection = 'desc';
+  private tableColumns: ZoteroMonitorTableColumn[];
   private managedProperties: ZoteroManagedUserProperties = {
     zoteroProject: [],
     zoteroTopic: [],
@@ -179,6 +179,7 @@ class ZoteroMissingItemsModal extends Modal {
   constructor(
     app: App,
     private items: ZoteroMonitorItem[],
+    tableColumns: ZoteroMonitorTableColumn[],
     private filterSummary: string[],
     private onImport: (
       items: ZoteroMonitorItem[],
@@ -187,6 +188,17 @@ class ZoteroMissingItemsModal extends Modal {
     private onFinished: () => void
   ) {
     super(app);
+    this.tableColumns = normalizeMonitorTableColumns(tableColumns);
+
+    if (!this.tableColumns.includes(this.sortKey)) {
+      this.sortKey = this.tableColumns.includes('dateAdded')
+        ? 'dateAdded'
+        : this.tableColumns[0];
+      this.sortDirection =
+        this.sortKey === 'dateAdded' || this.sortKey === 'dateModified'
+          ? 'desc'
+          : 'asc';
+    }
 
     for (const item of items) {
       if (this.isItemFromToday(item)) {
@@ -475,12 +487,6 @@ class ZoteroMissingItemsModal extends Modal {
     return Array.from(topics).sort((a, b) => a.localeCompare(b));
   }
 
-  private getScopesText(item: ZoteroMonitorItem): string {
-    const collections = getItemCollectionPaths(item.item);
-    const tags = getItemTags(item.item);
-    return [...collections, ...tags.map((tag) => `#${tag}`)].join(' ');
-  }
-
   private getSortValue(item: ZoteroMonitorItem): string | number {
     switch (this.sortKey) {
       case 'title':
@@ -493,8 +499,10 @@ class ZoteroMissingItemsModal extends Modal {
         return this.getDateSortValue(item.dateModified || item.dateAdded);
       case 'dateAdded':
         return this.getDateSortValue(item.dateAdded);
-      case 'scopes':
-        return this.getScopesText(item);
+      case 'tags':
+        return getItemTags(item.item).join(' ');
+      case 'collections':
+        return getItemCollectionPaths(item.item).join(' ');
       default:
         return '';
     }
@@ -617,6 +625,136 @@ class ZoteroMissingItemsModal extends Modal {
     this.updateQuickSelectButtons();
   }
 
+  private renderColumnHeader(
+    header: HTMLTableRowElement,
+    columnKey: ZoteroMonitorTableColumn
+  ) {
+    const column = ZOTERO_MONITOR_TABLE_COLUMN_BY_KEY[columnKey];
+    const cell = header.createEl('th', { cls: column.className });
+    const button = cell.createEl('button', {
+      cls: 'zt-monitor-sort-button',
+      text: column.label,
+    });
+    const isActive = this.sortKey === column.key;
+    button.toggleClass('is-active', isActive);
+    button.setAttribute(
+      'aria-sort',
+      isActive ? (this.sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
+    );
+    button.addEventListener('click', () => this.setSort(column.key));
+    if (isActive) {
+      button.createSpan({
+        cls: 'zt-monitor-sort-indicator',
+        text: this.sortDirection,
+      });
+    }
+  }
+
+  private renderTitleCell(
+    row: HTMLTableRowElement,
+    item: ZoteroMonitorItem,
+    className: string
+  ) {
+    const titleCell = row.createEl('td', {
+      cls: className,
+    });
+    const paperLink = getBestPaperLink(item);
+    const titleText = item.title || item.citekey;
+    const titleLink = titleCell.createEl('a', {
+      cls: 'zt-monitor-table-title zt-monitor-paper-link',
+      text: titleText,
+    });
+    titleLink.href = paperLink.href;
+    titleLink.target = '_blank';
+    titleLink.rel = 'noopener noreferrer';
+    titleLink.setAttribute('aria-label', `${paperLink.title}: ${titleText}`);
+    const linkRow = titleCell.createDiv('zt-monitor-paper-links');
+    const sourceLink = linkRow.createEl('a', {
+      cls: 'zt-monitor-paper-source-link',
+      text: paperLink.label,
+    });
+    sourceLink.href = paperLink.href;
+    sourceLink.target = '_blank';
+    sourceLink.rel = 'noopener noreferrer';
+  }
+
+  private renderChipCell(
+    row: HTMLTableRowElement,
+    className: string,
+    values: string[]
+  ) {
+    const cell = row.createEl('td', {
+      cls: className,
+    });
+
+    if (values.length) {
+      for (const value of values) {
+        cell.createSpan({
+          cls: 'zt-monitor-scope-chip',
+          text: value,
+        });
+      }
+      return;
+    }
+
+    cell.createSpan({
+      cls: 'zt-monitor-empty-value',
+      text: 'None',
+    });
+  }
+
+  private renderItemCell(
+    row: HTMLTableRowElement,
+    item: ZoteroMonitorItem,
+    columnKey: ZoteroMonitorTableColumn
+  ) {
+    const column = ZOTERO_MONITOR_TABLE_COLUMN_BY_KEY[columnKey];
+
+    switch (column.key) {
+      case 'title':
+        this.renderTitleCell(row, item, column.className);
+        return;
+      case 'citekey':
+        row.createEl('td', {
+          cls: column.className,
+          text: item.citekey,
+        });
+        return;
+      case 'library':
+        row.createEl('td', {
+          cls: column.className,
+          text: item.libraryName || `Library ${item.libraryID}`,
+        });
+        return;
+      case 'dateModified':
+        row.createEl('td', {
+          cls: column.className,
+          text: getDisplayDate(item.dateModified || item.dateAdded),
+        });
+        return;
+      case 'dateAdded':
+        row.createEl('td', {
+          cls: column.className,
+          text: getDisplayDate(item.dateAdded),
+        });
+        return;
+      case 'tags':
+        this.renderChipCell(
+          row,
+          column.className,
+          getItemTags(item.item).map((tag) => `#${tag}`)
+        );
+        return;
+      case 'collections':
+        this.renderChipCell(
+          row,
+          column.className,
+          getItemCollectionPaths(item.item)
+        );
+        return;
+    }
+  }
+
   private renderList() {
     this.listEl.empty();
 
@@ -634,46 +772,10 @@ class ZoteroMissingItemsModal extends Modal {
 
     const table = this.listEl.createEl('table', { cls: 'zt-monitor-table' });
     const header = table.createEl('thead').createEl('tr');
-    [
-      { text: '', cls: 'zt-monitor-table-check' },
-      { text: 'Title', cls: 'zt-monitor-table-title-header', sortKey: 'title' },
-      { text: 'Citekey', cls: 'zt-monitor-table-citekey', sortKey: 'citekey' },
-      { text: 'Library', cls: 'zt-monitor-table-library', sortKey: 'library' },
-      {
-        text: 'Modified',
-        cls: 'zt-monitor-table-date',
-        sortKey: 'dateModified',
-      },
-      { text: 'Added', cls: 'zt-monitor-table-date', sortKey: 'dateAdded' },
-      {
-        text: 'Tags / collections',
-        cls: 'zt-monitor-table-scopes',
-        sortKey: 'scopes',
-      },
-    ].forEach((column) => {
-      const cell = header.createEl('th', { cls: column.cls });
-      if (!column.sortKey) return;
-
-      const button = cell.createEl('button', {
-        cls: 'zt-monitor-sort-button',
-        text: column.text,
-      });
-      const isActive = this.sortKey === column.sortKey;
-      button.toggleClass('is-active', isActive);
-      button.setAttribute(
-        'aria-sort',
-        isActive ? (this.sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
-      );
-      button.addEventListener('click', () =>
-        this.setSort(column.sortKey as MonitorSortKey)
-      );
-      if (isActive) {
-        button.createSpan({
-          cls: 'zt-monitor-sort-indicator',
-          text: this.sortDirection,
-        });
-      }
-    });
+    header.createEl('th', { cls: 'zt-monitor-table-check' });
+    for (const column of this.tableColumns) {
+      this.renderColumnHeader(header, column);
+    }
 
     const body = table.createEl('tbody');
 
@@ -701,63 +803,8 @@ class ZoteroMissingItemsModal extends Modal {
         this.updateQuickSelectButtons();
       });
 
-      const titleCell = row.createEl('td', {
-        cls: 'zt-monitor-table-title-cell',
-      });
-      const paperLink = getBestPaperLink(item);
-      const titleText = item.title || item.citekey;
-      const titleLink = titleCell.createEl('a', {
-        cls: 'zt-monitor-table-title zt-monitor-paper-link',
-        text: titleText,
-      });
-      titleLink.href = paperLink.href;
-      titleLink.target = '_blank';
-      titleLink.rel = 'noopener noreferrer';
-      titleLink.setAttribute('aria-label', `${paperLink.title}: ${titleText}`);
-      const linkRow = titleCell.createDiv('zt-monitor-paper-links');
-      const sourceLink = linkRow.createEl('a', {
-        cls: 'zt-monitor-paper-source-link',
-        text: paperLink.label,
-      });
-      sourceLink.href = paperLink.href;
-      sourceLink.target = '_blank';
-      sourceLink.rel = 'noopener noreferrer';
-
-      row.createEl('td', {
-        cls: 'zt-monitor-table-citekey',
-        text: item.citekey,
-      });
-      row.createEl('td', {
-        cls: 'zt-monitor-table-library',
-        text: item.libraryName || `Library ${item.libraryID}`,
-      });
-      row.createEl('td', {
-        cls: 'zt-monitor-table-date',
-        text: getDisplayDate(item.dateModified || item.dateAdded),
-      });
-      row.createEl('td', {
-        cls: 'zt-monitor-table-date',
-        text: getDisplayDate(item.dateAdded),
-      });
-
-      const collections = getItemCollectionPaths(item.item);
-      const tags = getItemTags(item.item);
-      const scopes = [...collections, ...tags.map((tag) => `#${tag}`)];
-      const scopesCell = row.createEl('td', {
-        cls: 'zt-monitor-table-scopes',
-      });
-      if (scopes.length) {
-        for (const scope of scopes) {
-          scopesCell.createSpan({
-            cls: 'zt-monitor-scope-chip',
-            text: scope,
-          });
-        }
-      } else {
-        scopesCell.createSpan({
-          cls: 'zt-monitor-empty-value',
-          text: 'None',
-        });
+      for (const column of this.tableColumns) {
+        this.renderItemCell(row, item, column);
       }
     }
 
@@ -942,6 +989,7 @@ export class ZoteroMonitor {
       new ZoteroMissingItemsModal(
         this.plugin.app,
         missing,
+        this.plugin.settings.zoteroMonitorTableColumns || [],
         this.getFilterSummary(),
         (items, properties) => this.importItems(items, properties),
         () => {

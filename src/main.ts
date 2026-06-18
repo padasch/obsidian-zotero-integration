@@ -18,6 +18,7 @@ import {
   internalVersion,
 } from './settings/AssetDownloader';
 import { ZoteroMonitor } from './ZoteroMonitor';
+import { DEFAULT_ZOTERO_MONITOR_TABLE_COLUMNS } from './ZoteroMonitor.columns';
 import { ZoteroConnectorSettingsTab } from './settings/settings';
 import {
   CitationFormat,
@@ -51,6 +52,7 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   zoteroMonitorCollectionScope: [],
   zoteroMonitorTagScope: [],
   zoteroMonitorImportFormat: '',
+  zoteroMonitorTableColumns: DEFAULT_ZOTERO_MONITOR_TABLE_COLUMNS.slice(),
 };
 
 async function fixPath() {

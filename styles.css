@@ -327,6 +327,26 @@
   width: 0.9rem;
 }
 
+.zt-monitor-column-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-2);
+  justify-content: flex-end;
+}
+
+.zt-monitor-column-option {
+  align-items: center;
+  border-radius: var(--radius-s);
+  display: inline-flex;
+  gap: var(--size-4-2);
+  min-height: 0;
+  padding: 0.35rem 0.6rem;
+}
+
+.zt-monitor-column-option .checkbox-container {
+  pointer-events: none;
+}
+
 @keyframes bblFadInOut {
   0%,
   80%,
@@ -603,9 +623,8 @@
   width: 44px;
 }
 
-.zt-monitor-table-title-header,
 .zt-monitor-table-title-cell {
-  width: 30%;
+  width: 34%;
 }
 
 .zt-monitor-table-title {
@@ -662,9 +681,10 @@
   width: 9%;
 }
 
-.zt-monitor-table-scopes {
+.zt-monitor-table-tags,
+.zt-monitor-table-collections {
   overflow-wrap: anywhere;
-  width: 20%;
+  width: 16%;
 }
 
 .zt-monitor-scope-chip {

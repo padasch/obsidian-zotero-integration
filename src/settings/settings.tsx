@@ -8,11 +8,16 @@ import {
   ZOTERO_ANNOTATION_COLORS,
   ZOTERO_ANNOTATION_COLOR_HEX,
 } from '../ZoteroManagedProperties';
+import {
+  normalizeMonitorTableColumns,
+  ZOTERO_MONITOR_TABLE_COLUMN_OPTIONS,
+} from '../ZoteroMonitor.columns';
 import { formatScopeInput, splitScopeInput } from '../ZoteroMonitor.helpers';
 import {
   CitationFormat,
   ExportFormat,
   ZoteroConnectorSettings,
+  ZoteroMonitorTableColumn,
 } from '../types';
 import { AssetDownloader } from './AssetDownloader';
 import { CiteFormatSettings } from './CiteFormatSettings';
@@ -78,6 +83,11 @@ function SettingsComponent({
     !!settings.zoteroMonitorCheckOnStartup
   );
 
+  const [zoteroMonitorTableColumns, setZoteroMonitorTableColumns] =
+    React.useState(() =>
+      normalizeMonitorTableColumns(settings.zoteroMonitorTableColumns)
+    );
+
   const [taskAnnotationColors, setTaskAnnotationColors] = React.useState(
     settings.zoteroTaskAnnotationColors || []
   );
@@ -136,6 +146,25 @@ function SettingsComponent({
       setExportFormatState(removeExportFormat(index));
     },
     [removeExportFormat]
+  );
+
+  const toggleMonitorTableColumn = React.useCallback(
+    (column: ZoteroMonitorTableColumn) => {
+      setZoteroMonitorTableColumns((state) => {
+        const next = state.includes(column)
+          ? state.filter((item) => item !== column)
+          : [...state, column];
+
+        if (!next.length) {
+          return state;
+        }
+
+        const normalized = normalizeMonitorTableColumns(next);
+        updateSetting('zoteroMonitorTableColumns', normalized);
+        return normalized;
+      });
+    },
+    [updateSetting]
   );
 
   const tessPathRef = React.useRef<HTMLInputElement>(null);
@@ -486,6 +515,38 @@ function SettingsComponent({
             </option>
           ))}
         </select>
+      </SettingItem>
+      <SettingItem
+        name="Missing-reference table columns"
+        description="Choose which Zotero fields are shown in the missing-reference import modal."
+      >
+        <div className="zt-monitor-column-list">
+          {ZOTERO_MONITOR_TABLE_COLUMN_OPTIONS.map((column) => {
+            const isEnabled = zoteroMonitorTableColumns.includes(column.key);
+            const isLastEnabled =
+              isEnabled && zoteroMonitorTableColumns.length === 1;
+
+            return (
+              <button
+                key={column.key}
+                type="button"
+                className={`zt-monitor-column-option${
+                  isEnabled ? ' is-active' : ''
+                }`}
+                disabled={isLastEnabled}
+                aria-pressed={isEnabled}
+                onClick={() => toggleMonitorTableColumn(column.key)}
+              >
+                <span
+                  className={`checkbox-container${
+                    isEnabled ? ' is-enabled' : ''
+                  }`}
+                />
+                <span>{column.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </SettingItem>
       <SettingItem name="Check Zotero now">
         <button onClick={runZoteroMonitorCheck}>Check now</button>

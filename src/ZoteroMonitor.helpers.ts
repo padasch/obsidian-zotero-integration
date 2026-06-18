@@ -46,6 +46,28 @@ function parseTextOptions(values: unknown): string[] {
   return output;
 }
 
+function normalizeCollectionPath(value: string): string {
+  return value
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/')
+    .replace(/^\/|\/$/g, '')
+    .trim();
+}
+
+function keepLeafCollectionPaths(collections: string[]): string[] {
+  const paths = parseTextOptions(
+    collections.map((collection) => normalizeCollectionPath(collection))
+  );
+
+  return paths.filter((path, index) => {
+    const normalized = normalizeIdentifier(path);
+    return !paths.some((candidate, candidateIndex) => {
+      if (candidateIndex === index) return false;
+      return normalizeIdentifier(candidate).startsWith(`${normalized}/`);
+    });
+  });
+}
+
 function collectFrontmatterValues(values: unknown): string[] {
   const output: string[] = [];
 
@@ -135,7 +157,7 @@ export function getItemCollectionPaths(item: JsonMap): string[] {
           .filter(Boolean)
       : [];
 
-  return parseTextOptions(collections);
+  return keepLeafCollectionPaths(collections);
 }
 
 export function getItemTags(item: JsonMap): string[] {

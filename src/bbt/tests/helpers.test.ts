@@ -4,6 +4,7 @@ import {
   replaceIllegalChars,
   sanitizeFilePath,
 } from '../helpers';
+import { getItemCollectionPaths } from '../../ZoteroMonitor.helpers';
 
 describe('getPort()', () => {
   it('returns correct port for database', () => {
@@ -93,5 +94,28 @@ describe('sanitizeFilePath()', () => {
     expect(replaceIllegalChars('?')).toBe('');
     expect(replaceIllegalChars(':')).toBe('-');
     expect(replaceIllegalChars('*hello?')).toBe('hello');
+  });
+});
+
+describe('getItemCollectionPaths()', () => {
+  it('keeps only the deepest collection paths when Zotero returns parent paths', () => {
+    expect(
+      getItemCollectionPaths({
+        collections: [
+          'topics',
+          'topics/coding',
+          'topics/coding/r',
+          'reading',
+        ],
+      })
+    ).toEqual(['topics/coding/r', 'reading']);
+  });
+
+  it('normalizes duplicate separators before pruning parent paths', () => {
+    expect(
+      getItemCollectionPaths({
+        collections: 'topics, topics//coding, topics/coding/r',
+      })
+    ).toEqual(['topics/coding/r']);
   });
 });
