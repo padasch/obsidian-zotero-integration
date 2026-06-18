@@ -19,11 +19,7 @@ import { CiteFormatSettings } from './CiteFormatSettings';
 import { ExportFormatSettings } from './ExportFormatSettings';
 import { Icon } from './Icon';
 import { SettingItem } from './SettingItem';
-import {
-  filterFinderOptions,
-  getFolderOptions,
-  useStableDatalistId,
-} from './select.helpers';
+import { openFolderPicker } from './select.helpers';
 
 interface SettingsComponentProps {
   settings: ZoteroConnectorSettings;
@@ -149,20 +145,13 @@ function SettingsComponent({
     settings.database === 'Custom'
   );
 
-  const folderOptions = React.useMemo(() => getFolderOptions(), []);
   const [noteImportFolder, setNoteImportFolder] = React.useState(
     settings.noteImportFolder
   );
-  const noteImportFolderId = useStableDatalistId('zt-note-import-folder');
 
   React.useEffect(() => {
     setNoteImportFolder(settings.noteImportFolder);
   }, [settings.noteImportFolder]);
-
-  const noteImportFolderOptions = React.useMemo(
-    () => filterFinderOptions(noteImportFolder, folderOptions),
-    [noteImportFolder, folderOptions]
-  );
 
   const onChangeNoteImportFolder = React.useCallback(
     (value: string) => {
@@ -217,20 +206,24 @@ function SettingsComponent({
         name="Note Import Location"
         description="Notes imported from Zotero will be added to this folder in your vault"
       >
-        <input
-          type="text"
-          value={noteImportFolder}
-          placeholder="Search or type a folder path..."
-          list={noteImportFolderId}
-          onInput={(e) =>
-            onChangeNoteImportFolder((e.target as HTMLInputElement).value)
-          }
-        />
-        <datalist id={noteImportFolderId}>
-          {noteImportFolderOptions.map((option) => (
-            <option key={option.value} value={option.value} />
-          ))}
-        </datalist>
+        <div className="zt-picker-field">
+          <input
+            type="text"
+            value={noteImportFolder}
+            placeholder="Type a folder path or choose one"
+            onInput={(e) =>
+              onChangeNoteImportFolder((e.target as HTMLInputElement).value)
+            }
+          />
+          <button
+            type="button"
+            className="clickable-icon setting-editor-extra-setting-button zt-picker-button"
+            aria-label="Choose note import folder"
+            onClick={() => openFolderPicker(onChangeNoteImportFolder)}
+          >
+            <Icon name="lucide-folder-search" />
+          </button>
+        </div>
       </SettingItem>
       <SettingItem
         name="Open the created or updated note(s) after import"

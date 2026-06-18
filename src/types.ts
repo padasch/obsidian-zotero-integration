@@ -63,6 +63,7 @@ export interface ExportToMarkdownParams {
   settings: ZoteroConnectorSettings;
   database: DatabaseWithPort;
   exportFormat: ExportFormat;
+  managedProperties?: ZoteroManagedUserProperties;
 }
 
 export type ZoteroManagedUserStatus = string;

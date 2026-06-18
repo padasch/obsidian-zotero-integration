@@ -1,12 +1,10 @@
-import React from 'react';
+import React, { ChangeEvent } from 'react';
 
 import { ExportFormat } from '../types';
 import { Icon } from './Icon';
 import {
-  filterFinderOptions,
-  getMarkdownFileOptions,
-  searchCSLOptions,
-  useStableDatalistId,
+  openCSLStylePicker,
+  openMarkdownFilePicker,
 } from './select.helpers';
 
 interface FormatSettingsProps {
@@ -22,8 +20,6 @@ export function ExportFormatSettings({
   updateFormat,
   removeFormat,
 }: FormatSettingsProps) {
-  const markdownFileOptions = React.useMemo(() => getMarkdownFileOptions(), []);
-
   const [templatePath, setTemplatePath] = React.useState(format.templatePath || '');
   const [cslStyle, setCslStyle] = React.useState(format.cslStyle || '');
 
@@ -34,16 +30,6 @@ export function ExportFormatSettings({
   React.useEffect(() => {
     setCslStyle(format.cslStyle || '');
   }, [format.cslStyle]);
-
-  const templateDatalistId = useStableDatalistId('zt-export-template');
-  const cslDatalistId = useStableDatalistId('zt-export-bibliography-style');
-
-  const templateOptions = React.useMemo(
-    () => filterFinderOptions(templatePath, markdownFileOptions),
-    [templatePath, markdownFileOptions]
-  );
-
-  const cslOptions = React.useMemo(() => searchCSLOptions(cslStyle), [cslStyle]);
 
   const onChangeStr = React.useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -57,9 +43,8 @@ export function ExportFormatSettings({
     [updateFormat, index, format]
   );
 
-  const onChangeCSLStyle = React.useCallback(
-    (e: React.FormEvent<HTMLInputElement>) => {
-      const value = e.target.value;
+  const updateCSLStyle = React.useCallback(
+    (value: string) => {
       setCslStyle(value);
       updateFormat(index, {
         ...format,
@@ -69,9 +54,15 @@ export function ExportFormatSettings({
     [updateFormat, index, format]
   );
 
-  const onChangeTemplatePath = React.useCallback(
-    (e: React.FormEvent<HTMLInputElement>) => {
-      const value = e.target.value;
+  const onChangeCSLStyle = React.useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      updateCSLStyle((e.target as HTMLInputElement).value);
+    },
+    [updateCSLStyle]
+  );
+
+  const updateTemplatePath = React.useCallback(
+    (value: string) => {
       setTemplatePath(value);
       updateFormat(index, {
         ...format,
@@ -79,6 +70,13 @@ export function ExportFormatSettings({
       });
     },
     [updateFormat, index, format]
+  );
+
+  const onChangeTemplatePath = React.useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      updateTemplatePath((e.target as HTMLInputElement).value);
+    },
+    [updateTemplatePath]
   );
 
   const onRemove = React.useCallback(() => {
@@ -163,16 +161,18 @@ export function ExportFormatSettings({
         <div className="zt-format__input-wrapper">
           <input
             type="text"
-            placeholder="Search markdown files"
-            list={templateDatalistId}
+            placeholder="Type a path or choose a markdown file"
             value={templatePath}
             onInput={onChangeTemplatePath}
           />
-          <datalist id={templateDatalistId}>
-            {templateOptions.map((option) => (
-              <option key={option.value} value={option.value} />
-            ))}
-          </datalist>
+          <button
+            type="button"
+            className="clickable-icon setting-editor-extra-setting-button zt-picker-button"
+            aria-label="Choose template file"
+            onClick={() => openMarkdownFilePicker(updateTemplatePath)}
+          >
+            <Icon name="lucide-file-search" />
+          </button>
         </div>
         <div className="zt-format__input-note">
           Open the data explorer from the command palette to see available
@@ -300,18 +300,18 @@ export function ExportFormatSettings({
         <div className="zt-format__input-wrapper">
           <input
             type="text"
-            placeholder="Type style name"
-            list={cslDatalistId}
+            placeholder="Type a style id or choose one"
             value={cslStyle}
             onInput={onChangeCSLStyle}
           />
-          <datalist id={cslDatalistId}>
-            {cslOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </datalist>
+          <button
+            type="button"
+            className="clickable-icon setting-editor-extra-setting-button zt-picker-button"
+            aria-label="Choose bibliography style"
+            onClick={() => openCSLStylePicker(updateCSLStyle)}
+          >
+            <Icon name="lucide-search" />
+          </button>
         </div>
         <div className="zt-format__input-note">
           Note, the chosen style must be installed in Zotero. See{' '}

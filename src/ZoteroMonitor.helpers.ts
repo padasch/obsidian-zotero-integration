@@ -252,7 +252,6 @@ export function filterItemsByScope(
   return items.filter((item) => {
     if (libraries.length) {
       const libraryName = normalizeIdentifier(item.libraryName || '');
-      const libraryID = normalizeIdentifier(String(item.libraryID));
       if (
         !matchScope(libraries, String(item.libraryID)) &&
         !matchScope(libraries, libraryName)

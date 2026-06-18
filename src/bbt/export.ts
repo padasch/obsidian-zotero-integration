@@ -10,6 +10,7 @@ import {
   ExportToMarkdownParams,
   RenderCiteTemplateParams,
   ZoteroConnectorSettings,
+  ZoteroManagedUserProperties,
 } from '../types';
 import { applyBasicTemplates } from './basicTemplates/applyBasicTemplates';
 import { CiteKey, getCiteKeyFromAny, getCiteKeys } from './cayw';
@@ -593,6 +594,43 @@ async function getTemplateData(
   return await applyBasicTemplates(markdownPath, item);
 }
 
+function withManagedProperties(
+  templateData: any,
+  managedProperties?: ZoteroManagedUserProperties
+) {
+  if (!managedProperties) return templateData;
+
+  return {
+    ...templateData,
+    managedProperties,
+    zoteroProject: managedProperties.zoteroProject || [],
+    zoteroTopic: managedProperties.zoteroTopic || [],
+    zoteroNote: managedProperties.zoteroNote || '',
+    zoteroStatus: managedProperties.zoteroStatus || 'new',
+    ...(managedProperties.zoteroSummary
+      ? { zoteroSummary: managedProperties.zoteroSummary }
+      : {}),
+  };
+}
+
+async function writeManagedProperties(
+  file: TFile,
+  managedProperties?: ZoteroManagedUserProperties
+) {
+  if (!managedProperties) return;
+
+  await app.fileManager.processFrontMatter(file, (frontmatter) => {
+    frontmatter.zoteroProject = managedProperties.zoteroProject || [];
+    frontmatter.zoteroTopic = managedProperties.zoteroTopic || [];
+    frontmatter.zoteroNote = managedProperties.zoteroNote || '';
+    frontmatter.zoteroStatus = managedProperties.zoteroStatus || 'new';
+
+    if (managedProperties.zoteroSummary !== undefined) {
+      frontmatter.zoteroSummary = managedProperties.zoteroSummary;
+    }
+  });
+}
+
 export async function exportToMarkdown(
   params: ExportToMarkdownParams,
   explicitCiteKeys?: CiteKey[]
@@ -799,10 +837,9 @@ export async function exportToMarkdown(
       const { existingAnnotations, file, fileContent, item, lastImportDate } =
         data;
 
-      const templateData = await getTemplateData(
-        markdownPath,
-        item,
-        lastImportDate
+      const templateData = withManagedProperties(
+        await getTemplateData(markdownPath, item, lastImportDate),
+        params.managedProperties
       );
       const rendered = await renderTemplates(
         params,
@@ -825,11 +862,13 @@ export async function exportToMarkdown(
         
         if (shouldOverwrite) {
           await app.vault.modify(file, rendered);
+          await writeManagedProperties(file, params.managedProperties);
           createdOrUpdatedMarkdownFiles.push(markdownPath);
         }
       } else {
         await mkMDDir(markdownPath);
-        await app.vault.create(markdownPath, rendered);
+        const createdFile = await app.vault.create(markdownPath, rendered);
+        await writeManagedProperties(createdFile, params.managedProperties);
         createdOrUpdatedMarkdownFiles.push(markdownPath);
       }
     } catch (e) {

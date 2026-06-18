@@ -53,6 +53,13 @@ If the monitor is quiet, check monitor settings (`Monitor` section) for:
 - selected libraries / collections / tags
 - selected import format
 
+## Can I import several newly found references with different project metadata?
+
+Yes. Use **Open Import** from the monitor notice or **Check now** in settings. In the review modal:
+
+- **Import selected (...) and close** imports the selected references and closes the modal.
+- **Import selected (...) and continue** imports the selected references, removes them from the review list, and keeps the modal open so you can change project/topic/status/note fields for the next import.
+
 
 ## Unanswered questions
 - What is the difference between the various BibTeX and CSL-based configurations?

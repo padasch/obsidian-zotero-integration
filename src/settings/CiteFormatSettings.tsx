@@ -2,12 +2,7 @@ import React, { ChangeEvent } from 'react';
 
 import { CitationFormat, Format } from '../types';
 import { Icon } from './Icon';
-import {
-  searchCSLOptions,
-  useStableDatalistId,
-  filterFinderOptions,
-} from './select.helpers';
-import { cslListRaw } from './cslList';
+import { openCSLStylePicker } from './select.helpers';
 
 interface FormatSettingsProps {
   format: CitationFormat;
@@ -27,15 +22,6 @@ export function CiteFormatSettings({
   React.useEffect(() => {
     setCslStyle(format.cslStyle || '');
   }, [format.cslStyle]);
-
-  const cslDatalistId = useStableDatalistId('zt-citation-style');
-  const cslOptions = React.useMemo(
-    () =>
-      format.format === 'template' || format.format === 'formatted-bibliography'
-        ? filterFinderOptions(cslStyle, cslListRaw, 50)
-        : searchCSLOptions(cslStyle, 50),
-    [cslStyle, format.format]
-  );
 
   const onChangeName = React.useCallback(
     (e: ChangeEvent) => {
@@ -86,9 +72,8 @@ export function CiteFormatSettings({
     [updateFormat, index, format]
   );
 
-  const onChangeCSLStyle = React.useCallback(
-    (e: React.FormEvent<HTMLInputElement>) => {
-      const value = (e.target as HTMLInputElement).value;
+  const updateCSLStyle = React.useCallback(
+    (value: string) => {
       setCslStyle(value);
       updateFormat(index, {
         ...format,
@@ -96,6 +81,13 @@ export function CiteFormatSettings({
       });
     },
     [updateFormat, index, format]
+  );
+
+  const onChangeCSLStyle = React.useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      updateCSLStyle((e.target as HTMLInputElement).value);
+    },
+    [updateCSLStyle]
   );
 
   const onChangeCommand = React.useCallback(
@@ -201,18 +193,18 @@ export function CiteFormatSettings({
           <div className="zt-format__input-wrapper">
             <input
               type="text"
-              placeholder="Type style name"
-              list={cslDatalistId}
+              placeholder="Type a style id or choose one"
               value={cslStyle}
               onInput={onChangeCSLStyle}
             />
-            <datalist id={cslDatalistId}>
-              {cslOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </datalist>
+            <button
+              type="button"
+              className="clickable-icon setting-editor-extra-setting-button zt-picker-button"
+              aria-label="Choose citation style"
+              onClick={() => openCSLStylePicker(updateCSLStyle)}
+            >
+              <Icon name="lucide-search" />
+            </button>
           </div>
           <div className="zt-format__input-note">
             Note, the chosen style must be installed in Zotero. See{' '}

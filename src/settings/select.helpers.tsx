@@ -1,11 +1,17 @@
-import { TFolder } from 'obsidian';
-import React from 'react';
+import { FuzzySuggestModal, TFolder } from 'obsidian';
 
 import { cslList, cslListRaw } from './cslList';
 
 export type FinderOption = {
   value: string;
   label: string;
+  searchText?: string;
+};
+
+type FinderModalConfig = {
+  emptyStateText?: string;
+  limit?: number;
+  placeholder: string;
 };
 
 export function normalizeFinderQuery(query: string): string {
@@ -94,6 +100,65 @@ export function getFolderOptions(): FinderOption[] {
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
+class FinderSuggestModal extends FuzzySuggestModal<FinderOption> {
+  constructor(
+    private options: FinderOption[],
+    private onChoose: (option: FinderOption) => void,
+    config: FinderModalConfig
+  ) {
+    super(app);
+    this.limit = config.limit || 50;
+    this.emptyStateText = config.emptyStateText || 'No matches found.';
+    this.setPlaceholder(config.placeholder);
+  }
+
+  getItems(): FinderOption[] {
+    return this.options;
+  }
+
+  getItemText(option: FinderOption): string {
+    return option.searchText || `${option.label} ${option.value}`;
+  }
+
+  renderSuggestion(item: { item: FinderOption }, el: HTMLElement): void {
+    const option = item.item;
+    el.createDiv({ cls: 'zt-finder-suggestion-title', text: option.label });
+    if (option.value !== option.label) {
+      el.createDiv({ cls: 'zt-finder-suggestion-path', text: option.value });
+    }
+  }
+
+  onChooseItem(option: FinderOption): void {
+    this.onChoose(option);
+  }
+}
+
+export function openFinderPicker(
+  options: FinderOption[],
+  onChoose: (value: string) => void,
+  config: FinderModalConfig
+) {
+  new FinderSuggestModal(
+    options,
+    (option) => onChoose(option.value),
+    config
+  ).open();
+}
+
+export function openFolderPicker(onChoose: (value: string) => void) {
+  openFinderPicker(getFolderOptions(), onChoose, {
+    placeholder: 'Choose a folder',
+    emptyStateText: 'No folders found.',
+  });
+}
+
+export function openMarkdownFilePicker(onChoose: (value: string) => void) {
+  openFinderPicker(getMarkdownFileOptions(), onChoose, {
+    placeholder: 'Choose a markdown file',
+    emptyStateText: 'No markdown files found.',
+  });
+}
+
 function searchCSLByText(query: string) {
   const normalized = normalizeFinderQuery(query);
   if (!normalized) return cslListRaw;
@@ -120,8 +185,18 @@ export function searchCSLOptions(query: string, limit = 50): FinderOption[] {
   );
 }
 
-export function useStableDatalistId(prefix: string) {
-  return React.useMemo(() => `${prefix}-${Math.random().toString(36).slice(2)}`, [
-    prefix,
-  ]);
+export function openCSLStylePicker(onChoose: (value: string) => void) {
+  openFinderPicker(
+    cslListRaw.map((entry) => ({
+      value: entry.value,
+      label: entry.label,
+      searchText: `${entry.label} ${entry.value}`,
+    })),
+    onChoose,
+    {
+      placeholder: 'Choose a citation style',
+      emptyStateText: 'No citation styles found.',
+      limit: 80,
+    }
+  );
 }

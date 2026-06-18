@@ -102,8 +102,10 @@ class ZoteroMissingItemsModal extends Modal {
     zoteroNote: '',
     zoteroStatus: 'new',
   };
+  private isImporting = false;
   private listEl: HTMLDivElement;
   private importButton: HTMLButtonElement;
+  private importButtonContinue: HTMLButtonElement;
   private quickSelectButtons: { [key in MonitorQuickSelect]: HTMLButtonElement | null } = {
     none: null,
     today: null,
@@ -190,26 +192,33 @@ class ZoteroMissingItemsModal extends Modal {
     this.quickSelectButtons.all.addEventListener('click', () => setQuickSelectMode('all'));
 
     this.renderBulkFields(container);
-    this.listEl = container.createDiv('zt-monitor-list');
 
     const buttons = container.createDiv('zt-monitor-buttons');
-    const dismissButton = buttons.createEl('button', { text: 'Dismiss' });
-    dismissButton.addEventListener('click', () => this.close());
+    const cancelButton = buttons.createEl('button', { text: 'Cancel' });
+    cancelButton.addEventListener('click', () => this.close());
 
     this.importButton = buttons.createEl('button', {
-      text: `Import selected (${this.selected.size})`,
+      text: `Import selected (${this.selected.size}) and close`,
     });
     this.importButton.addClass('mod-cta');
     this.importButton.addEventListener('click', async () => {
       const selectedItems = this.getSelectedItems();
       if (!selectedItems.length) return;
 
-      this.importButton.disabled = true;
-      this.importButton.setText('Importing...');
-      await this.onImport(selectedItems, this.getManagedProperties());
-      this.close();
+      await this.handleImport(selectedItems, false);
     });
 
+    this.importButtonContinue = buttons.createEl('button', {
+      text: `Import selected (${this.selected.size}) and continue`,
+    });
+    this.importButtonContinue.addEventListener('click', async () => {
+      const selectedItems = this.getSelectedItems();
+      if (!selectedItems.length) return;
+
+      await this.handleImport(selectedItems, true);
+    });
+
+    this.listEl = container.createDiv('zt-monitor-list');
     this.renderList();
     search.focus();
   }
@@ -246,6 +255,42 @@ class ZoteroMissingItemsModal extends Modal {
       zoteroNote: this.managedProperties.zoteroNote || '',
       zoteroStatus: this.managedProperties.zoteroStatus || 'new',
     };
+  }
+
+  private async handleImport(
+    selectedItems: ZoteroMonitorItem[],
+    continueAfterImport: boolean
+  ) {
+    if (!selectedItems.length || this.isImporting) return;
+
+    this.isImporting = true;
+    this.setImportingState(true);
+
+    try {
+      await this.onImport(selectedItems, this.getManagedProperties());
+
+      if (!continueAfterImport) {
+        this.close();
+        return;
+      }
+
+      const imported = new Set(selectedItems.map((item) => itemIdentity(item)));
+      this.items = this.items.filter((item) => !imported.has(itemIdentity(item)));
+      this.selected.clear();
+      this.quickSelect = 'custom';
+      this.renderList();
+
+      if (!this.items.length) {
+        this.close();
+      }
+    } catch (e) {
+      new Notice('Failed to import selected Zotero references.', 10000);
+      console.error(e);
+    } finally {
+      this.isImporting = false;
+      this.setImportingState(false);
+      this.updateImportButtons();
+    }
   }
 
   private renderBulkFields(container: HTMLDivElement) {
@@ -436,11 +481,41 @@ class ZoteroMissingItemsModal extends Modal {
     return createdAt >= startOfToday && createdAt < startOfTomorrow;
   }
 
-  private updateImportButton() {
-    if (!this.importButton) return;
+  private setImportingState(isImporting: boolean) {
+    if (this.importButton) {
+      this.importButton.disabled = isImporting;
+      this.importButton.setText(
+        isImporting
+          ? 'Importing...'
+          : `Import selected (${this.getSelectedItems().length}) and close`
+      );
+    }
 
-    this.importButton.setText(`Import selected (${this.selected.size})`);
-    this.importButton.disabled = this.selected.size === 0;
+    if (this.importButtonContinue) {
+      this.importButtonContinue.disabled = isImporting;
+      this.importButtonContinue.setText(
+        isImporting
+          ? 'Importing...'
+          : `Import selected (${this.getSelectedItems().length}) and continue`
+      );
+    }
+  }
+
+  private updateImportButtons() {
+    const selectedCount = this.getSelectedItems().length;
+
+    if (this.importButton) {
+      this.importButton.setText(`Import selected (${selectedCount}) and close`);
+      this.importButton.disabled = selectedCount === 0 || this.isImporting;
+    }
+
+    if (this.importButtonContinue) {
+      this.importButtonContinue.setText(
+        `Import selected (${selectedCount}) and continue`
+      );
+      this.importButtonContinue.disabled =
+        selectedCount === 0 || this.isImporting;
+    }
   }
 
   private updateQuickSelectButtons() {
@@ -480,7 +555,7 @@ class ZoteroMissingItemsModal extends Modal {
         cls: 'zt-monitor-empty',
         text: 'No matching Zotero items.',
       });
-      this.updateImportButton();
+      this.updateImportButtons();
       return;
     }
 
@@ -551,7 +626,7 @@ class ZoteroMissingItemsModal extends Modal {
 
         this.quickSelect = 'custom';
         row.toggleClass('is-selected', checkbox.checked);
-        this.updateImportButton();
+        this.updateImportButtons();
         this.updateQuickSelectButtons();
       });
 
@@ -601,7 +676,7 @@ class ZoteroMissingItemsModal extends Modal {
       }
     }
 
-    this.updateImportButton();
+    this.updateImportButtons();
   }
 }
 
@@ -718,7 +793,7 @@ export class ZoteroMonitor {
     ignoreBtn.type = 'button';
 
     backgroundBtn.addEventListener('click', async () => {
-      const managedProperties = {
+      const managedProperties: ZoteroManagedUserProperties = {
         zoteroProject: [],
         zoteroTopic: [],
         zoteroNote: '',
@@ -866,8 +941,7 @@ export class ZoteroMonitor {
             library: libraryID,
           })),
           database,
-          libraryID,
-          true
+          libraryID
         );
 
         if (!Array.isArray(itemData)) continue;
@@ -899,12 +973,10 @@ export class ZoteroMonitor {
           key: item.citekey,
           library: item.libraryID,
         },
-        database,
-        true
+        database
       );
 
       if (collections) {
-        item.collections = collections;
         item.item.collections = collections;
       }
     }
@@ -950,14 +1022,12 @@ export class ZoteroMonitor {
           settings: this.plugin.settings,
           database,
           exportFormat,
+          managedProperties,
         },
         libraryItems.map((item) => ({
           key: item.citekey,
           library: libraryID,
-        })),
-        {
-          managedProperties,
-        }
+        }))
       );
 
       createdOrUpdatedPaths.push(...paths);

@@ -14,7 +14,7 @@ Before installing/updating this plugin in your vault, make a backup of:
 
 ## Latest release
 
-Current plugin release: **3.2.8**.
+Current plugin release: **3.2.9**.
 
 ## Install
 
@@ -40,16 +40,19 @@ Current plugin release: **3.2.8**.
 
 ## Key fork updates
 
-- **Obsidian-style quick pickers** in settings for:
+- **Obsidian fuzzy picker buttons** in settings for:
   - note import folder
   - markdown template path
   - CSL bibliography / citation style
   
-  Start typing and Obsidian suggestions are shown from available folders/files/styles.
+  Type paths manually when needed, or use the picker buttons to search available folders, files, and styles.
 - **Persistent monitor notice** for new references with explicit actions:
   - `Open Import`
   - `Background Import`
   - `Ignore`
+- **Multi-step missing-reference imports** in the review modal:
+  - `Import selected (...) and close`
+  - `Import selected (...) and continue`
 - Cleaner and slimmer settings documentation and CSS cleanup, with legacy screenshot assets removed from the repository.
 
 ## Settings that matter most
@@ -66,14 +69,14 @@ You can control how many recent days it considers (`Recent Zotero items`), scope
 
 ### Default-style folder/file/style entry fields
 
-The following fields are now plain input fields with typeahead recommendations:
+The following fields are now plain input fields with Obsidian fuzzy picker buttons:
 
 - `Note Import Location`
 - `Template File`
 - `Citation Style`
 - `Bibliography Style`
 
-This avoids non-standard select behavior and keeps the look aligned with Obsidian settings UI.
+This avoids non-standard select behavior while keeping manual path entry available.
 
 ## Documentation
 

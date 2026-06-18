@@ -1,3 +1,10 @@
+* 3.2.9
+  - Replaced datalist-style settings suggestions with public Obsidian fuzzy picker modals for folder, markdown template, and CSL style fields.
+  - Added **Import selected (...) and close** and **Import selected (...) and continue** actions to the missing-reference review modal.
+  - Kept monitor review actions above the scrollable results list so they remain visible while reviewing references.
+  - Retained persistent automatic monitor notices with **Open Import**, **Background Import**, and **Ignore** actions.
+  - Refreshed docs for backup guidance, fork lineage, and AI-assisted maintenance.
+
 * 3.2.8
   - Simplified settings UI for folder/file/style selectors by using Obsidian-style input recommendations for:
     - note import folder
