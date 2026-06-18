@@ -1,6 +1,6 @@
 {
   "name": "obsidian-zotero-integration",
-  "version": "3.2.9",
+  "version": "3.2.10",
   "description": "Obsidian plugin to import citations, bibliographies, notes, and annotations from Zotero.",
   "main": "main.js",
   "scripts": {

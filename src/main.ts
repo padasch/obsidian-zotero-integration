@@ -143,6 +143,14 @@ export default class ZoteroConnector extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: 'zdc-check-missing-literature',
+      name: 'Find missing Zotero literature notes',
+      callback: () => {
+        this.zoteroMonitor.runManualCheck();
+      },
+    });
+
     this.registerEvent(
       this.app.vault.on('modify', (file) => {
         if (file instanceof TFile) {
@@ -154,14 +162,16 @@ export default class ZoteroConnector extends Plugin {
     app.workspace.trigger('parse-style-settings');
     this.zoteroMonitor.schedule();
 
-    if (
-      this.settings.zoteroMonitorEnabled &&
-      this.settings.zoteroMonitorCheckOnStartup
-    ) {
-      this.app.workspace.onLayoutReady(() => {
+    this.app.workspace.onLayoutReady(() => {
+      this.zoteroMonitor.preload();
+
+      if (
+        this.settings.zoteroMonitorEnabled &&
+        this.settings.zoteroMonitorCheckOnStartup
+      ) {
         this.zoteroMonitor.runAutomaticCheck();
-      });
-    }
+      }
+    });
 
     fixPath();
   }
@@ -318,6 +328,7 @@ export default class ZoteroConnector extends Plugin {
   async saveSettings() {
     this.emitter.trigger('settingsUpdated');
     this.zoteroMonitor.schedule();
+    this.zoteroMonitor.preload();
     await this.saveData(this.settings);
   }
 

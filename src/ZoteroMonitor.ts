@@ -27,6 +27,8 @@ import {
 } from './bbt/jsonRPC';
 
 const BATCH_SIZE = 50;
+const MONITOR_ITEM_CACHE_TTL_MS = 10 * 60 * 1000;
+const MONITOR_PRELOAD_DELAY_MS = 1500;
 type MonitorQuickSelect = 'none' | 'today' | 'all';
 type MonitorSelectionMode = MonitorQuickSelect | 'custom';
 type MonitorSortDirection = 'asc' | 'desc';
@@ -37,6 +39,16 @@ type MonitorSortKey =
   | 'dateModified'
   | 'dateAdded'
   | 'scopes';
+type MonitorItemCache = {
+  databaseKey: string;
+  fetchedAt: number;
+  items: ZoteroMonitorItem[];
+};
+type PaperLink = {
+  href: string;
+  label: string;
+  title: string;
+};
 
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -90,6 +102,57 @@ function splitBulkInput(value: string): string[] {
     .filter((part) => !!part);
 }
 
+function getItemString(
+  item: ZoteroMonitorItem,
+  keys: string[]
+): string {
+  const source = item.item as Record<string, unknown>;
+
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return '';
+}
+
+function normalizeDoi(value: string): string {
+  return value
+    .trim()
+    .replace(/^https?:\/\/(dx\.)?doi\.org\//i, '')
+    .replace(/^doi:\s*/i, '')
+    .trim();
+}
+
+function getBestPaperLink(item: ZoteroMonitorItem): PaperLink {
+  const doi = normalizeDoi(getItemString(item, ['DOI', 'doi']));
+  if (doi) {
+    return {
+      href: `https://doi.org/${encodeURI(doi)}`,
+      label: 'DOI',
+      title: 'Open DOI',
+    };
+  }
+
+  const url = getItemString(item, ['url', 'URL']);
+  if (/^https?:\/\//i.test(url)) {
+    return {
+      href: url,
+      label: 'Web',
+      title: 'Open publisher page',
+    };
+  }
+
+  const query = item.title || item.citekey;
+  return {
+    href: `https://scholar.google.com/scholar?q=${encodeURIComponent(query)}`,
+    label: 'Search',
+    title: 'Search online',
+  };
+}
+
 class ZoteroMissingItemsModal extends Modal {
   private selected = new Set<string>();
   private quickSelect: MonitorSelectionMode = 'today';
@@ -104,6 +167,7 @@ class ZoteroMissingItemsModal extends Modal {
   };
   private isImporting = false;
   private listEl: HTMLDivElement;
+  private selectionSummaryEl: HTMLDivElement;
   private importButton: HTMLButtonElement;
   private importButtonContinue: HTMLButtonElement;
   private quickSelectButtons: { [key in MonitorQuickSelect]: HTMLButtonElement | null } = {
@@ -119,7 +183,7 @@ class ZoteroMissingItemsModal extends Modal {
     private onImport: (
       items: ZoteroMonitorItem[],
       properties: ZoteroManagedUserProperties
-    ) => Promise<void>,
+    ) => Promise<string[]>,
     private onFinished: () => void
   ) {
     super(app);
@@ -191,15 +255,17 @@ class ZoteroMissingItemsModal extends Modal {
     this.quickSelectButtons.all.type = 'button';
     this.quickSelectButtons.all.addEventListener('click', () => setQuickSelectMode('all'));
 
-    this.renderBulkFields(container);
-
-    const buttons = container.createDiv('zt-monitor-buttons');
+    const actionBar = container.createDiv('zt-monitor-action-bar');
+    this.selectionSummaryEl = actionBar.createDiv('zt-monitor-action-summary');
+    const buttons = actionBar.createDiv('zt-monitor-buttons');
     const cancelButton = buttons.createEl('button', { text: 'Cancel' });
+    cancelButton.type = 'button';
     cancelButton.addEventListener('click', () => this.close());
 
     this.importButton = buttons.createEl('button', {
-      text: `Import selected (${this.selected.size}) and close`,
+      text: 'Import & close',
     });
+    this.importButton.type = 'button';
     this.importButton.addClass('mod-cta');
     this.importButton.addEventListener('click', async () => {
       const selectedItems = this.getSelectedItems();
@@ -209,14 +275,17 @@ class ZoteroMissingItemsModal extends Modal {
     });
 
     this.importButtonContinue = buttons.createEl('button', {
-      text: `Import selected (${this.selected.size}) and continue`,
+      text: 'Import & continue',
     });
+    this.importButtonContinue.type = 'button';
     this.importButtonContinue.addEventListener('click', async () => {
       const selectedItems = this.getSelectedItems();
       if (!selectedItems.length) return;
 
       await this.handleImport(selectedItems, true);
     });
+
+    this.renderBulkFields(container);
 
     this.listEl = container.createDiv('zt-monitor-list');
     this.renderList();
@@ -267,7 +336,15 @@ class ZoteroMissingItemsModal extends Modal {
     this.setImportingState(true);
 
     try {
-      await this.onImport(selectedItems, this.getManagedProperties());
+      const createdOrUpdatedPaths = await this.onImport(
+        selectedItems,
+        this.getManagedProperties()
+      );
+
+      if (!createdOrUpdatedPaths.length) {
+        new Notice('No Zotero literature notes were imported.', 5000);
+        return;
+      }
 
       if (!continueAfterImport) {
         this.close();
@@ -482,40 +559,34 @@ class ZoteroMissingItemsModal extends Modal {
   }
 
   private setImportingState(isImporting: boolean) {
-    if (this.importButton) {
-      this.importButton.disabled = isImporting;
-      this.importButton.setText(
-        isImporting
-          ? 'Importing...'
-          : `Import selected (${this.getSelectedItems().length}) and close`
-      );
-    }
+    this.importButton.disabled = isImporting;
+    this.importButton.setText(isImporting ? 'Importing...' : 'Import & close');
 
-    if (this.importButtonContinue) {
-      this.importButtonContinue.disabled = isImporting;
-      this.importButtonContinue.setText(
-        isImporting
-          ? 'Importing...'
-          : `Import selected (${this.getSelectedItems().length}) and continue`
-      );
-    }
+    this.importButtonContinue.disabled = isImporting;
+    this.importButtonContinue.setText(
+      isImporting ? 'Importing...' : 'Import & continue'
+    );
   }
 
   private updateImportButtons() {
     const selectedCount = this.getSelectedItems().length;
+    const itemCount = this.items.length;
 
-    if (this.importButton) {
-      this.importButton.setText(`Import selected (${selectedCount}) and close`);
-      this.importButton.disabled = selectedCount === 0 || this.isImporting;
-    }
+    this.selectionSummaryEl.setText(
+      `${selectedCount} of ${itemCount} selected`
+    );
 
-    if (this.importButtonContinue) {
-      this.importButtonContinue.setText(
-        `Import selected (${selectedCount}) and continue`
-      );
-      this.importButtonContinue.disabled =
-        selectedCount === 0 || this.isImporting;
-    }
+    this.importButton.disabled = selectedCount === 0 || this.isImporting;
+    this.importButtonContinue.disabled =
+      selectedCount === 0 || this.isImporting;
+    this.importButton.setAttribute(
+      'aria-label',
+      `Import ${selectedCount} selected Zotero items and close`
+    );
+    this.importButtonContinue.setAttribute(
+      'aria-label',
+      `Import ${selectedCount} selected Zotero items and continue`
+    );
   }
 
   private updateQuickSelectButtons() {
@@ -633,10 +704,24 @@ class ZoteroMissingItemsModal extends Modal {
       const titleCell = row.createEl('td', {
         cls: 'zt-monitor-table-title-cell',
       });
-      titleCell.createDiv({
-        cls: 'zt-monitor-table-title',
-        text: item.title || item.citekey,
+      const paperLink = getBestPaperLink(item);
+      const titleText = item.title || item.citekey;
+      const titleLink = titleCell.createEl('a', {
+        cls: 'zt-monitor-table-title zt-monitor-paper-link',
+        text: titleText,
       });
+      titleLink.href = paperLink.href;
+      titleLink.target = '_blank';
+      titleLink.rel = 'noopener noreferrer';
+      titleLink.setAttribute('aria-label', `${paperLink.title}: ${titleText}`);
+      const linkRow = titleCell.createDiv('zt-monitor-paper-links');
+      const sourceLink = linkRow.createEl('a', {
+        cls: 'zt-monitor-paper-source-link',
+        text: paperLink.label,
+      });
+      sourceLink.href = paperLink.href;
+      sourceLink.target = '_blank';
+      sourceLink.rel = 'noopener noreferrer';
 
       row.createEl('td', {
         cls: 'zt-monitor-table-citekey',
@@ -682,9 +767,12 @@ class ZoteroMissingItemsModal extends Modal {
 
 export class ZoteroMonitor {
   private intervalId: number | null = null;
+  private preloadTimeoutId: number | null = null;
   private checkInProgress = false;
   private modalOpen = false;
   private lastNoticeKey = '';
+  private itemCache: MonitorItemCache | null = null;
+  private itemCachePromise: Promise<ZoteroMonitorItem[]> | null = null;
 
   constructor(private plugin: ZoteroConnector) {}
 
@@ -710,6 +798,32 @@ export class ZoteroMonitor {
       window.clearInterval(this.intervalId);
       this.intervalId = null;
     }
+
+    if (this.preloadTimeoutId !== null) {
+      window.clearTimeout(this.preloadTimeoutId);
+      this.preloadTimeoutId = null;
+    }
+  }
+
+  preload(delayMs = MONITOR_PRELOAD_DELAY_MS) {
+    if (this.preloadTimeoutId !== null) {
+      window.clearTimeout(this.preloadTimeoutId);
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      this.preloadTimeoutId = null;
+      this.refreshItemCache(false).catch((error) => {
+        console.error('Failed to preload Zotero monitor cache', error);
+      });
+    }, delayMs);
+
+    this.preloadTimeoutId = timeoutId;
+  }
+
+  invalidateCache() {
+    this.itemCache = null;
+    this.itemCachePromise = null;
+    this.lastNoticeKey = '';
   }
 
   async runManualCheck() {
@@ -843,6 +957,88 @@ export class ZoteroMonitor {
     };
   }
 
+  private getDatabaseCacheKey(): string {
+    const database = this.getDatabase();
+    return `${database.database}:${database.port || ''}`;
+  }
+
+  private getCachedMonitorItems(): ZoteroMonitorItem[] | null {
+    if (!this.itemCache) return null;
+    if (this.itemCache.databaseKey !== this.getDatabaseCacheKey()) return null;
+    if (Date.now() - this.itemCache.fetchedAt > MONITOR_ITEM_CACHE_TTL_MS) {
+      return null;
+    }
+
+    return this.itemCache.items;
+  }
+
+  private async getMonitorItems(showConnectionNotice: boolean) {
+    const cached = this.getCachedMonitorItems();
+    if (cached) {
+      return cached;
+    }
+
+    return this.refreshItemCache(showConnectionNotice);
+  }
+
+  private async refreshItemCache(
+    showConnectionNotice: boolean
+  ): Promise<ZoteroMonitorItem[]> {
+    if (this.itemCachePromise) {
+      return this.itemCachePromise;
+    }
+
+    const databaseKey = this.getDatabaseCacheKey();
+    const database = this.getDatabase();
+
+    this.itemCachePromise = (async () => {
+      if (!(await isZoteroRunning(database, true))) {
+        if (showConnectionNotice) {
+          new Notice(
+            'Cannot connect to Zotero. Please ensure it is running and Better BibTeX is installed.',
+            10000
+          );
+        }
+
+        return this.itemCache?.databaseKey === databaseKey
+          ? this.itemCache.items
+          : [];
+      }
+
+      const { citekeys } = await getAllCiteKeys(database, true);
+      const items = citekeys.length
+        ? await this.fetchMonitorItems(uniqueCandidates(citekeys), true)
+        : [];
+
+      this.itemCache = {
+        databaseKey,
+        fetchedAt: Date.now(),
+        items,
+      };
+
+      return items;
+    })();
+
+    try {
+      return await this.itemCachePromise;
+    } finally {
+      this.itemCachePromise = null;
+    }
+  }
+
+  private removeItemsFromCache(items: ZoteroMonitorItem[]) {
+    if (!this.itemCache) return;
+
+    const imported = new Set(items.map((item) => itemIdentity(item)));
+    this.itemCache = {
+      ...this.itemCache,
+      items: this.itemCache.items.filter(
+        (item) => !imported.has(itemIdentity(item))
+      ),
+    };
+    this.lastNoticeKey = '';
+  }
+
   private getScope(): ZoteroMonitorScope {
     return {
       libraryScope: this.plugin.settings.zoteroMonitorLibraryScope || [],
@@ -874,22 +1070,9 @@ export class ZoteroMonitor {
   }
 
   private async getMissingItems(manual: boolean): Promise<ZoteroMonitorItem[]> {
-    const database = this.getDatabase();
+    const items = await this.getMonitorItems(manual);
+    if (!items.length) return [];
 
-    if (!(await isZoteroRunning(database, true))) {
-      if (manual) {
-        new Notice(
-          'Cannot connect to Zotero. Please ensure it is running and Better BibTeX is installed.',
-          10000
-        );
-      }
-      return [];
-    }
-
-    const { citekeys } = await getAllCiteKeys(database, true);
-    if (!citekeys.length) return [];
-
-    const items = await this.fetchMonitorItems(uniqueCandidates(citekeys));
     const recent = filterItemsByRecentDays(
       items,
       this.plugin.settings.zoteroMonitorRecentDays
@@ -903,7 +1086,7 @@ export class ZoteroMonitor {
     });
 
     if (scope.collectionScope.length) {
-      await this.hydrateCollections(scoped);
+      await this.hydrateCollections(scoped, true);
       scoped = filterItemsByScope(scoped, {
         libraryScope: [],
         collectionScope: scope.collectionScope,
@@ -916,7 +1099,8 @@ export class ZoteroMonitor {
   }
 
   private async fetchMonitorItems(
-    candidates: CiteKeyExport[]
+    candidates: CiteKeyExport[],
+    silent = false
   ): Promise<ZoteroMonitorItem[]> {
     const database = this.getDatabase();
     const byLibrary = new Map<number, CiteKeyExport[]>();
@@ -941,7 +1125,8 @@ export class ZoteroMonitor {
             library: libraryID,
           })),
           database,
-          libraryID
+          libraryID,
+          silent
         );
 
         if (!Array.isArray(itemData)) continue;
@@ -962,7 +1147,7 @@ export class ZoteroMonitor {
     return monitorItems;
   }
 
-  private async hydrateCollections(items: ZoteroMonitorItem[]) {
+  private async hydrateCollections(items: ZoteroMonitorItem[], silent = false) {
     const database = this.getDatabase();
 
     for (const item of items) {
@@ -973,7 +1158,8 @@ export class ZoteroMonitor {
           key: item.citekey,
           library: item.libraryID,
         },
-        database
+        database,
+        silent
       );
 
       if (collections) {
@@ -1000,7 +1186,7 @@ export class ZoteroMonitor {
   private async importItems(
     items: ZoteroMonitorItem[],
     managedProperties: ZoteroManagedUserProperties
-  ) {
+  ): Promise<string[]> {
     const exportFormatName =
       this.plugin.settings.zoteroMonitorImportFormat ||
       this.plugin.settings.exportFormats[0]?.name;
@@ -1010,7 +1196,7 @@ export class ZoteroMonitor {
 
     if (!exportFormat) {
       new Notice('No Zotero import format selected for the monitor.', 10000);
-      return;
+      return [];
     }
 
     const createdOrUpdatedPaths: string[] = [];
@@ -1034,6 +1220,9 @@ export class ZoteroMonitor {
     }
 
     await this.plugin.openNotes(createdOrUpdatedPaths);
+    if (createdOrUpdatedPaths.length) {
+      this.removeItemsFromCache(items);
+    }
 
     if (createdOrUpdatedPaths.length) {
       new Notice(
@@ -1042,5 +1231,7 @@ export class ZoteroMonitor {
         }.`
       );
     }
+
+    return createdOrUpdatedPaths;
   }
 }

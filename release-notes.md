@@ -1,3 +1,10 @@
+* 3.2.10
+  - Added a short-lived background cache for Zotero monitor item metadata so the missing-reference review does not rerun the full Zotero scan on every open.
+  - Moved missing-reference modal actions into a visible top action bar with compact **Import & close** and **Import & continue** buttons.
+  - Fixed continue/close handling so imported rows are removed only after notes are actually created or updated.
+  - Added online links to missing-reference titles using DOI, publisher URL, or Google Scholar fallback.
+  - Reduced visual weight of monitor controls and kept only the table area scrollable.
+
 * 3.2.9
   - Replaced datalist-style settings suggestions with public Obsidian fuzzy picker modals for folder, markdown template, and CSL style fields.
   - Added **Import selected (...) and close** and **Import selected (...) and continue** actions to the missing-reference review modal.

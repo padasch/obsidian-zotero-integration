@@ -54,12 +54,15 @@ export async function getNotesFromCiteKeys(
 
 export async function getCollectionFromCiteKey(
   citeKey: CiteKey,
-  database: DatabaseWithPort
+  database: DatabaseWithPort,
+  silent?: boolean
 ) {
   let res: string;
 
-  const modal = new LoadingModal(app, 'Fetching collections from Zotero...');
-  modal.open();
+  const modal = silent
+    ? null
+    : new LoadingModal(app, 'Fetching collections from Zotero...');
+  modal?.open();
 
   const qid = Symbol();
   try {
@@ -79,14 +82,16 @@ export async function getCollectionFromCiteKey(
     });
   } catch (e) {
     console.error(e);
-    modal.close();
-    new Notice(`Error retrieving notes: ${e.message}`, 10000);
+    modal?.close();
+    if (!silent) {
+      new Notice(`Error retrieving notes: ${e.message}`, 10000);
+    }
     ZQueue.end(qid);
     return null;
   }
 
   ZQueue.end(qid);
-  modal.close();
+  modal?.close();
 
   try {
     const result = JSON.parse(res).result;
@@ -310,12 +315,15 @@ export async function getBibFromCiteKeys(
 export async function getItemJSONFromCiteKeys(
   citeKeys: CiteKey[],
   database: DatabaseWithPort,
-  libraryID: number
+  libraryID: number,
+  silent?: boolean
 ) {
   let res: string;
 
-  const modal = new LoadingModal(app, 'Fetching data from Zotero...');
-  modal.open();
+  const modal = silent
+    ? null
+    : new LoadingModal(app, 'Fetching data from Zotero...');
+  modal?.open();
 
   const qid = Symbol();
   try {
@@ -339,14 +347,16 @@ export async function getItemJSONFromCiteKeys(
     });
   } catch (e) {
     console.error(e);
-    modal.close();
-    new Notice(`Error retrieving item data: ${e.message}`, 10000);
+    modal?.close();
+    if (!silent) {
+      new Notice(`Error retrieving item data: ${e.message}`, 10000);
+    }
     ZQueue.end(qid);
     return null;
   }
 
   ZQueue.end(qid);
-  modal.close();
+  modal?.close();
 
   try {
     const parsed = JSON.parse(res);
@@ -359,7 +369,9 @@ export async function getItemJSONFromCiteKeys(
       : JSON.parse(parsed.result).items;
   } catch (e) {
     console.error(e);
-    new Notice(`Error retrieving item data: ${e.message}`, 10000);
+    if (!silent) {
+      new Notice(`Error retrieving item data: ${e.message}`, 10000);
+    }
     return null;
   }
 }

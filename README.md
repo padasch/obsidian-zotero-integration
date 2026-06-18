@@ -14,7 +14,7 @@ Before installing/updating this plugin in your vault, make a backup of:
 
 ## Latest release
 
-Current plugin release: **3.2.9**.
+Current plugin release: **3.2.10**.
 
 ## Install
 
@@ -53,6 +53,8 @@ Current plugin release: **3.2.9**.
 - **Multi-step missing-reference imports** in the review modal:
   - `Import selected (...) and close`
   - `Import selected (...) and continue`
+- **Faster missing-reference review** through background Zotero metadata caching.
+- **Online paper links** in the missing-reference table, using DOI/publisher URL or a Scholar search fallback.
 - Cleaner and slimmer settings documentation and CSS cleanup, with legacy screenshot assets removed from the repository.
 
 ## Settings that matter most
