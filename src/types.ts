@@ -129,6 +129,7 @@ export interface ZoteroConnectorSettings {
   exeOverridePath?: string;
   exportFormats: ExportFormat[];
   noteImportFolder: string;
+  openFileAfterImportPath?: string;
   openNoteAfterImport: boolean;
   pdfExportImageDPI?: number;
   pdfExportImageFormat?: string;

@@ -24,7 +24,7 @@ import { CiteFormatSettings } from './CiteFormatSettings';
 import { ExportFormatSettings } from './ExportFormatSettings';
 import { Icon } from './Icon';
 import { SettingItem } from './SettingItem';
-import { openFolderPicker } from './select.helpers';
+import { openFolderPicker, openMarkdownFilePicker } from './select.helpers';
 import { getInvalidPreservedProperties } from './validation';
 
 interface SettingsComponentProps {
@@ -257,15 +257,26 @@ function SettingsComponent({
   const [noteImportFolder, setNoteImportFolder] = React.useState(
     settings.noteImportFolder
   );
+  const [openFileAfterImportPath, setOpenFileAfterImportPath] = React.useState(
+    settings.openFileAfterImportPath || ''
+  );
 
   React.useEffect(() => {
     setNoteImportFolder(settings.noteImportFolder);
-  }, [settings.noteImportFolder]);
+    setOpenFileAfterImportPath(settings.openFileAfterImportPath || '');
+  }, [settings.noteImportFolder, settings.openFileAfterImportPath]);
 
   const onChangeNoteImportFolder = React.useCallback(
     (value: string) => {
       setNoteImportFolder(value);
       updateSetting('noteImportFolder', value);
+    },
+    [updateSetting]
+  );
+  const onChangeOpenFileAfterImportPath = React.useCallback(
+    (value: string) => {
+      setOpenFileAfterImportPath(value);
+      updateSetting('openFileAfterImportPath', value.trim());
     },
     [updateSetting]
   );
@@ -392,6 +403,33 @@ function SettingsComponent({
             <option value="last-imported-note">Last imported note</option>
             <option value="all-imported-notes">All imported notes</option>
           </select>
+        </SettingItem>
+        <SettingItem
+          name="Open specific file after import"
+          description="Optional. Open this markdown file after a successful import or update, for example a Bases literature overview."
+        >
+          <div className="zt-picker-field">
+            <input
+              type="text"
+              value={openFileAfterImportPath}
+              placeholder="Type a note path or choose one"
+              onInput={(e) =>
+                onChangeOpenFileAfterImportPath(
+                  (e.target as HTMLInputElement).value
+                )
+              }
+            />
+            <button
+              type="button"
+              className="clickable-icon setting-editor-extra-setting-button zt-picker-button"
+              aria-label="Choose file to open after import"
+              onClick={() =>
+                openMarkdownFilePicker(onChangeOpenFileAfterImportPath)
+              }
+            >
+              <Icon name="lucide-file-search" />
+            </button>
+          </div>
         </SettingItem>
         <SettingItem
           name="Annotation concatenation"

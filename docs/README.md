@@ -20,6 +20,7 @@ Back up your vault and plugin configuration before installing, upgrading, or exp
   - template file path
   - citation / bibliography style
 - A built-in minimal Literature Note template is used when Template File is blank.
+- Optional post-import opening of a fixed markdown file, useful for a Bases literature overview.
 - Missing-reference review modal actions:
   - Import & close
   - Import & continue

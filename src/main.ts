@@ -1,5 +1,5 @@
 import Fuse from 'fuse.js';
-import { EditableFileView, Events, Plugin, TFile } from 'obsidian';
+import { EditableFileView, Events, Notice, Plugin, TFile } from 'obsidian';
 import { shellPath } from 'shell-path';
 
 import { DataExplorerView, viewType } from './DataExplorerView';
@@ -81,6 +81,7 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   citeFormats: [],
   exportFormats: cloneDefaultExportFormats(),
   citeSuggestTemplate: '[[{{citekey}}]]',
+  openFileAfterImportPath: '',
   openNoteAfterImport: false,
   whichNotesToOpenAfterImport: 'first-imported-note',
   zoteroPreservedProperties: [],
@@ -330,28 +331,38 @@ export default class ZoteroConnector extends Plugin {
   }
 
   async openNotes(createdOrUpdatedMarkdownFilesPaths: string[]) {
+    const importedPaths = createdOrUpdatedMarkdownFilesPaths.filter(Boolean);
     const pathOfNotesToOpen: string[] = [];
+    const addPath = (path?: string) => {
+      const cleaned = String(path || '').trim();
+      if (cleaned && !pathOfNotesToOpen.includes(cleaned)) {
+        pathOfNotesToOpen.push(cleaned);
+      }
+    };
+
     if (this.settings.openNoteAfterImport) {
       // Depending on the choice, retreive the paths of the first, the last or all imported notes
       switch (this.settings.whichNotesToOpenAfterImport) {
         case 'first-imported-note': {
-          pathOfNotesToOpen.push(createdOrUpdatedMarkdownFilesPaths[0]);
+          addPath(importedPaths[0]);
           break;
         }
         case 'last-imported-note': {
-          pathOfNotesToOpen.push(
-            createdOrUpdatedMarkdownFilesPaths[
-              createdOrUpdatedMarkdownFilesPaths.length - 1
-            ]
-          );
+          addPath(importedPaths[importedPaths.length - 1]);
           break;
         }
         case 'all-imported-notes': {
-          pathOfNotesToOpen.push(...createdOrUpdatedMarkdownFilesPaths);
+          importedPaths.forEach(addPath);
           break;
         }
       }
     }
+
+    if (importedPaths.length && this.settings.openFileAfterImportPath) {
+      addPath(this.settings.openFileAfterImportPath);
+    }
+
+    if (!pathOfNotesToOpen.length) return;
 
     // Force a 1s delay after importing the files to make sure that notes are created before attempting to open them.
     // A better solution could surely be found to refresh the vault, but I am not sure how to proceed!
@@ -367,6 +378,8 @@ export default class ZoteroConnector extends Plugin {
         app.workspace.revealLeaf(open);
       } else if (note instanceof TFile) {
         await this.app.workspace.getLeaf(true).openFile(note);
+      } else {
+        new Notice(`Post-import file not found: ${path}`, 7000);
       }
     }
   }

@@ -14,7 +14,7 @@ Before installing/updating this plugin in your vault, make a backup of:
 
 ## Current version
 
-Current plugin version: **3.2.16**.
+Current plugin version: **3.2.17**.
 
 ## Install
 
@@ -54,6 +54,7 @@ Current plugin version: **3.2.16**.
   - `Import & close`
   - `Import & continue`
 - **Built-in Literature Note template** so a template file is optional for normal imports.
+- **Optional post-import overview file** so imports can open a fixed note such as a Bases literature dashboard.
 - **Faster missing-reference review** through background Zotero metadata caching.
 - **Online paper links** in the missing-reference table, using DOI/publisher URL or a Scholar search fallback.
 - **Configurable Zotero item table columns** with text-field ordering, column validation, and separate tags / leaf collection path columns.
