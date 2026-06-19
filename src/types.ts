@@ -64,6 +64,9 @@ export interface ExportToMarkdownParams {
   database: DatabaseWithPort;
   exportFormat: ExportFormat;
   managedProperties?: ZoteroManagedUserProperties;
+  forceOverwrite?: boolean;
+  pathOverrides?: Record<string, string>;
+  afterWrite?: (file: any, item: any, markdownPath: string) => void | Promise<void>;
 }
 
 export type ZoteroManagedUserStatus = string;
@@ -150,6 +153,11 @@ export interface ZoteroConnectorSettings {
   zoteroMonitorImportFormat?: string;
   zoteroItemTableColumns?: string[];
   zoteroMonitorTableColumns?: string[];
+  zoteroOrphanedProperty?: string;
+  zoteroSciteApiToken?: string;
+  zoteroSciteEnabled?: boolean;
+  zoteroSciteRefreshIntervalDays?: number;
+  zoteroSciteRefreshOnImport?: boolean;
 }
 
 export interface CiteKeyExport {

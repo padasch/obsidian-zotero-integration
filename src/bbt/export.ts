@@ -594,6 +594,29 @@ async function getTemplateData(
   return await applyBasicTemplates(markdownPath, item);
 }
 
+function getItemPathOverrideKey(item: any): string | null {
+  const citekey =
+    item?.citekey ||
+    item?.citationKey ||
+    item?.['citation-key'] ||
+    getCiteKeyFromAny(item)?.key;
+  const libraryID = item?.libraryID || getCiteKeyFromAny(item)?.library;
+
+  if (!citekey || !libraryID) return null;
+
+  return `${libraryID}:${String(citekey).toLocaleLowerCase()}`;
+}
+
+function getItemPathOverride(
+  item: any,
+  pathOverrides?: Record<string, string>
+): string | null {
+  const key = getItemPathOverrideKey(item);
+  if (!key || !pathOverrides) return null;
+
+  return pathOverrides[key] || null;
+}
+
 function withManagedProperties(
   templateData: any,
   managedProperties?: ZoteroManagedUserProperties
@@ -701,6 +724,11 @@ export async function exportToMarkdown(
   };
 
   const getMarkdownPath = async (pathTemplateData: any) => {
+    const pathOverride = getItemPathOverride(pathTemplateData, params.pathOverrides);
+    if (pathOverride) {
+      return normalizePath(pathOverride);
+    }
+
     return normalizePath(
       sanitizeFilePath(
         removeStartingSlash(
@@ -850,25 +878,34 @@ export async function exportToMarkdown(
       if (!rendered) continue;
 
       if (file) {
-        // Show confirmation modal before overwriting existing file
-        const modal = new ConfirmationModal(
-          app,
-          'Literature Note Already Exists',
-          `The literature note "${markdownPath}" has been created before. Are you sure you want to overwrite it?`
-        );
-        modal.open();
-        
-        const shouldOverwrite = await modal.waitForResult();
-        
-        if (shouldOverwrite) {
+        if (params.forceOverwrite) {
           await app.vault.modify(file, rendered);
           await writeManagedProperties(file, params.managedProperties);
+          await params.afterWrite?.(file, item, markdownPath);
           createdOrUpdatedMarkdownFiles.push(markdownPath);
+        } else {
+          // Show confirmation modal before overwriting existing file.
+          const modal = new ConfirmationModal(
+            app,
+            'Literature Note Already Exists',
+            `The literature note "${markdownPath}" has been created before. Are you sure you want to overwrite it?`
+          );
+          modal.open();
+
+          const shouldOverwrite = await modal.waitForResult();
+
+          if (shouldOverwrite) {
+            await app.vault.modify(file, rendered);
+            await writeManagedProperties(file, params.managedProperties);
+            await params.afterWrite?.(file, item, markdownPath);
+            createdOrUpdatedMarkdownFiles.push(markdownPath);
+          }
         }
       } else {
         await mkMDDir(markdownPath);
         const createdFile = await app.vault.create(markdownPath, rendered);
         await writeManagedProperties(createdFile, params.managedProperties);
+        await params.afterWrite?.(createdFile, item, markdownPath);
         createdOrUpdatedMarkdownFiles.push(markdownPath);
       }
     } catch (e) {

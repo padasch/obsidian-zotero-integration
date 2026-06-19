@@ -320,6 +320,8 @@ export function filterMissingZoteroItems(
         ...collectFrontmatterValues(frontmatter.zotero_key),
         ...collectFrontmatterValues(frontmatter.zoteroKey),
         ...collectFrontmatterValues(frontmatter.citekey),
+        ...collectFrontmatterValues(frontmatter.zoteroCitekey),
+        ...collectFrontmatterValues(frontmatter.zoteroCiteKey),
         ...collectFrontmatterValues(frontmatter.citationKey),
         ...collectFrontmatterValues(frontmatter.citationkey),
         ...collectFrontmatterValues(frontmatter['citation-key']),

@@ -254,7 +254,7 @@ export class DataExplorerView extends ItemView {
   }
 
   getDisplayText() {
-    return 'Zotero Data Explorer';
+    return 'Test import template';
   }
 
   mountJsonViewer() {

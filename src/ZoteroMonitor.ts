@@ -1,4 +1,4 @@
-import { App, Modal, Notice } from 'obsidian';
+import { App, Modal, Notice, TFile, request } from 'obsidian';
 
 import type ZoteroConnector from './main';
 import {
@@ -29,6 +29,7 @@ import {
 } from './ZoteroMonitor.helpers';
 import { exportToMarkdown } from './bbt/export';
 import { isZoteroRunning } from './bbt/cayw';
+import type { CiteKey } from './bbt/cayw';
 import {
   getAllCiteKeys,
   getCollectionFromCiteKey,
@@ -38,6 +39,20 @@ import {
 const BATCH_SIZE = 50;
 const MONITOR_ITEM_CACHE_TTL_MS = 10 * 60 * 1000;
 const MONITOR_PRELOAD_DELAY_MS = 1500;
+const DEFAULT_ORPHANED_PROPERTY = 'zoteroOrphaned';
+const ORPHANED_CHECKED_AT_PROPERTY = 'zoteroOrphanedCheckedAt';
+const ORPHANED_REASON_PROPERTY = 'zoteroOrphanedReason';
+const SCITE_PROPERTIES = [
+  'zoteroSciteCitingPublications',
+  'zoteroSciteContradicting',
+  'zoteroSciteMentioning',
+  'zoteroSciteStatus',
+  'zoteroSciteSupporting',
+  'zoteroSciteTotalStatements',
+  'zoteroSciteUnclassified',
+  'zoteroSciteUpdatedAt',
+  'zoteroSciteURL',
+];
 type MonitorQuickSelect = 'none' | 'today' | 'all';
 type MonitorSelectionMode = MonitorQuickSelect | 'custom';
 type MonitorSortDirection = 'asc' | 'desc';
@@ -51,6 +66,28 @@ type PaperLink = {
   href: string;
   label: string;
   title: string;
+};
+type ExistingLiteratureNote = {
+  file: TFile;
+  frontmatter: Record<string, any>;
+  citekey: string;
+  libraryID?: number;
+  itemKey?: string;
+};
+type MatchedLiteratureNote = ExistingLiteratureNote & {
+  item: ZoteroMonitorItem;
+};
+type OrphanedLiteratureNote = ExistingLiteratureNote & {
+  reason: string;
+};
+type SciteTallies = {
+  citingPublications?: number;
+  contradicting?: number;
+  doi: string;
+  mentioning?: number;
+  supporting?: number;
+  total?: number;
+  unclassified?: number;
 };
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -154,10 +191,444 @@ function shouldIgnoreRowSelectionClick(target: EventTarget | null): boolean {
   );
 }
 
-class ZoteroMissingItemsModal extends Modal {
+function normalizeIdentityValue(value: unknown): string {
+  return String(value || '').trim().toLocaleLowerCase();
+}
+
+function normalizeOptionalNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === '') return undefined;
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function frontmatterValues(value: unknown): string[] {
+  if (value === null || value === undefined) return [];
+
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((entry) => frontmatterValues(entry))
+      .filter((entry) => !!entry);
+  }
+
+  if (typeof value === 'object') {
+    const source = value as Record<string, unknown>;
+    return [
+      source.key,
+      source.citekey,
+      source.citationKey,
+      source.itemKey,
+    ]
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean);
+  }
+
+  return String(value || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function firstFrontmatterValue(
+  frontmatter: Record<string, any>,
+  keys: string[]
+): string {
+  for (const key of keys) {
+    const value = frontmatterValues(frontmatter[key])[0];
+    if (value) return value;
+  }
+
+  return '';
+}
+
+function getNoteCitekey(frontmatter: Record<string, any>): string {
+  return firstFrontmatterValue(frontmatter, [
+    'zoteroCitekey',
+    'zoteroCiteKey',
+    'citekey',
+    'citationKey',
+    'citationkey',
+    'citation-key',
+  ]).replace(/^@/, '');
+}
+
+function getNoteItemKey(frontmatter: Record<string, any>): string {
+  return firstFrontmatterValue(frontmatter, [
+    'zoteroItemKey',
+    'itemKey',
+    'zoteroKey',
+    'zotero_key',
+  ]);
+}
+
+function getNoteLibraryID(frontmatter: Record<string, any>): number | undefined {
+  return normalizeOptionalNumber(
+    firstFrontmatterValue(frontmatter, ['zoteroLibraryID', 'libraryID'])
+  );
+}
+
+function getNoteDoi(frontmatter: Record<string, any>): string {
+  return normalizeDoi(
+    firstFrontmatterValue(frontmatter, ['zoteroDOI', 'DOI', 'doi'])
+  );
+}
+
+function getExistingNoteIdentity(
+  file: TFile,
+  frontmatter: Record<string, any>
+): ExistingLiteratureNote | null {
+  const citekey = getNoteCitekey(frontmatter);
+  const itemKey = getNoteItemKey(frontmatter);
+
+  if (!citekey && !itemKey) return null;
+
+  return {
+    file,
+    frontmatter,
+    citekey,
+    itemKey,
+    libraryID: getNoteLibraryID(frontmatter),
+  };
+}
+
+function itemPathOverrideKey(item: ZoteroMonitorItem): string {
+  return `${item.libraryID}:${item.citekey.toLocaleLowerCase()}`;
+}
+
+function matchesExistingNote(
+  item: ZoteroMonitorItem,
+  note: ExistingLiteratureNote
+): boolean {
+  const noteLibraryID = note.libraryID;
+  const sameLibrary =
+    noteLibraryID === undefined || Number(noteLibraryID) === item.libraryID;
+
+  if (note.itemKey && item.itemKey && sameLibrary) {
+    return (
+      normalizeIdentityValue(note.itemKey) === normalizeIdentityValue(item.itemKey)
+    );
+  }
+
+  if (note.citekey) {
+    return (
+      sameLibrary &&
+      normalizeIdentityValue(note.citekey) === normalizeIdentityValue(item.citekey)
+    );
+  }
+
+  return false;
+}
+
+function getMatchedItem(
+  note: ExistingLiteratureNote,
+  items: ZoteroMonitorItem[]
+): ZoteroMonitorItem | null {
+  return items.find((item) => matchesExistingNote(item, note)) || null;
+}
+
+function getOrphanReason(note: ExistingLiteratureNote): string {
+  if (note.libraryID && note.itemKey) {
+    return `No Zotero item with library ${note.libraryID} and item key ${note.itemKey}`;
+  }
+
+  if (note.libraryID && note.citekey) {
+    return `No Zotero item with library ${note.libraryID} and citekey ${note.citekey}`;
+  }
+
+  if (note.citekey) {
+    return `No Zotero item with citekey ${note.citekey}`;
+  }
+
+  return 'No matching Zotero item found';
+}
+
+function parseRequestedCitekeys(value: string): Array<{
+  citekey: string;
+  libraryID?: number;
+}> {
+  const seen = new Set<string>();
+  const parsed: Array<{ citekey: string; libraryID?: number }> = [];
+
+  for (const rawEntry of value.split(/[,\s;]+/g)) {
+    const raw = rawEntry.trim().replace(/^@/, '');
+    if (!raw) continue;
+
+    const match = raw.match(/^(\d+)[/:](.+)$/);
+    const libraryID = match ? Number(match[1]) : undefined;
+    const citekey = (match ? match[2] : raw).trim().replace(/^@/, '');
+    if (!citekey) continue;
+
+    const key = `${libraryID || ''}:${citekey.toLocaleLowerCase()}`;
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    parsed.push({ citekey, libraryID });
+  }
+
+  return parsed;
+}
+
+function candidateMatchesRequest(
+  candidate: CiteKeyExport,
+  requested: { citekey: string; libraryID?: number }
+): boolean {
+  if (
+    requested.citekey.toLocaleLowerCase() !== candidate.citekey.toLocaleLowerCase()
+  ) {
+    return false;
+  }
+
+  return (
+    requested.libraryID === undefined ||
+    Number(requested.libraryID) === Number(candidate.libraryID)
+  );
+}
+
+function normalizeSciteNumber(source: Record<string, any>, keys: string[]) {
+  for (const key of keys) {
+    const value = source[key];
+    if (value === null || value === undefined || value === '') continue;
+
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+
+  return undefined;
+}
+
+function sciteReportUrl(doi: string): string {
+  return `https://scite.ai/reports/${encodeURI(normalizeDoi(doi))}`;
+}
+
+function normalizeSciteTallies(payload: any, doi: string): SciteTallies {
+  const source = payload?.tallies || payload?.result || payload || {};
+
+  return {
+    citingPublications: normalizeSciteNumber(source, [
+      'citingPublications',
+      'citingPublicationsValue',
+      'citing_publications',
+    ]),
+    contradicting: normalizeSciteNumber(source, [
+      'contradicting',
+      'contradictingValue',
+      'contrasting',
+      'contrastingValue',
+    ]),
+    doi: normalizeDoi(source.doi || source.DOI || doi),
+    mentioning: normalizeSciteNumber(source, ['mentioning', 'mentioningValue']),
+    supporting: normalizeSciteNumber(source, ['supporting', 'supportingValue']),
+    total: normalizeSciteNumber(source, ['total', 'totalValue']),
+    unclassified: normalizeSciteNumber(source, [
+      'unclassified',
+      'unclassifiedValue',
+    ]),
+  };
+}
+
+function scitePropertiesFromTallies(
+  tallies: SciteTallies,
+  updatedAt = new Date().toISOString()
+): Record<string, unknown> {
+  const doi = normalizeDoi(tallies.doi);
+
+  return {
+    zoteroSciteCitingPublications: tallies.citingPublications,
+    zoteroSciteContradicting: tallies.contradicting,
+    zoteroSciteMentioning: tallies.mentioning,
+    zoteroSciteStatus: 'ok',
+    zoteroSciteSupporting: tallies.supporting,
+    zoteroSciteTotalStatements: tallies.total,
+    zoteroSciteUnclassified: tallies.unclassified,
+    zoteroSciteUpdatedAt: updatedAt,
+    zoteroSciteURL: doi ? sciteReportUrl(doi) : undefined,
+  };
+}
+
+async function fetchSciteTallies(
+  doi: string,
+  apiToken?: string
+): Promise<Record<string, unknown>> {
+  const normalizedDoi = normalizeDoi(doi);
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  };
+  const token = String(apiToken || '').trim();
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await request({
+    method: 'GET',
+    url: `https://api.scite.ai/tallies/${encodeURI(normalizedDoi)}`,
+    headers,
+  });
+
+  return scitePropertiesFromTallies(
+    normalizeSciteTallies(JSON.parse(response), normalizedDoi)
+  );
+}
+
+function renderLinkedTitleCell(
+  row: HTMLTableRowElement,
+  item: ZoteroMonitorItem,
+  className: string
+) {
+  const titleCell = row.createEl('td', {
+    cls: className,
+  });
+  const paperLink = getBestPaperLink(item);
+  const titleText = item.title || item.citekey;
+  const titleLink = titleCell.createEl('a', {
+    cls: 'zt-monitor-table-title zt-monitor-paper-link',
+    text: titleText,
+  });
+  titleLink.href = paperLink.href;
+  titleLink.target = '_blank';
+  titleLink.rel = 'noopener noreferrer';
+  titleLink.setAttribute('aria-label', `${paperLink.title}: ${titleText}`);
+  const linkRow = titleCell.createDiv('zt-monitor-paper-links');
+  const sourceLink = linkRow.createEl('a', {
+    cls: 'zt-monitor-paper-source-link',
+    text: paperLink.label,
+  });
+  sourceLink.href = paperLink.href;
+  sourceLink.target = '_blank';
+  sourceLink.rel = 'noopener noreferrer';
+}
+
+function renderItemChipCell(
+  row: HTMLTableRowElement,
+  className: string,
+  values: string[]
+) {
+  const cell = row.createEl('td', {
+    cls: className,
+  });
+
+  if (values.length) {
+    for (const value of values) {
+      cell.createSpan({
+        cls: 'zt-monitor-scope-chip',
+        text: value,
+      });
+    }
+    return;
+  }
+
+  cell.createSpan({
+    cls: 'zt-monitor-empty-value',
+    text: 'None',
+  });
+}
+
+function renderConfiguredItemCell(
+  row: HTMLTableRowElement,
+  item: ZoteroMonitorItem,
+  columnKey: ZoteroItemTableColumn
+) {
+  const column = ZOTERO_ITEM_TABLE_COLUMN_BY_KEY[columnKey];
+
+  if (column.key === 'title') {
+    renderLinkedTitleCell(row, item, column.className);
+    return;
+  }
+
+  if (isZoteroItemTableChipColumn(column.key)) {
+    renderItemChipCell(
+      row,
+      column.className,
+      getZoteroItemTableChipValues(item, column.key)
+    );
+    return;
+  }
+
+  row.createEl('td', {
+    cls: column.className,
+    text: getZoteroItemTableCellText(item, column.key),
+  });
+}
+
+class ZoteroDirectImportRequestModal extends Modal {
+  private inputEl: HTMLTextAreaElement;
+  private statusEl: HTMLDivElement;
+  private submitButton: HTMLButtonElement;
+
+  constructor(
+    app: App,
+    private onSubmit: (value: string) => Promise<void>
+  ) {
+    super(app);
+  }
+
+  onOpen() {
+    this.contentEl.empty();
+    this.modalEl.addClass('zt-monitor-modal-shell');
+
+    const container = this.contentEl.createDiv('zt-monitor-modal');
+    const header = container.createDiv('zt-monitor-header');
+    header.createEl('h2', { text: 'Import specific Zotero notes' });
+    header.createEl('p', {
+      text: 'Enter one or more citekeys. Use library prefixes such as 1:smith2024 when needed.',
+    });
+
+    const field = container.createDiv('zt-monitor-bulk-fields');
+    const inputWrapper = field.createDiv('zt-monitor-bulk-field');
+    inputWrapper.addClass('zt-monitor-bulk-field-wide');
+    inputWrapper.createEl('label', { text: 'Citekeys' });
+    this.inputEl = inputWrapper.createEl('textarea');
+    this.inputEl.rows = 5;
+    this.inputEl.placeholder = '@smith2024, 1:doe2025';
+
+    this.statusEl = container.createDiv('zt-monitor-action-summary');
+    const buttons = container.createDiv('zt-monitor-buttons');
+    const cancelButton = buttons.createEl('button', { text: 'Cancel' });
+    cancelButton.type = 'button';
+    cancelButton.addEventListener('click', () => this.close());
+
+    this.submitButton = buttons.createEl('button', {
+      text: 'Fetch items',
+    });
+    this.submitButton.type = 'button';
+    this.submitButton.addClass('mod-cta');
+    this.submitButton.addEventListener('click', async () => {
+      const value = this.inputEl.value.trim();
+      if (!value) {
+        this.statusEl.setText('Enter at least one citekey.');
+        return;
+      }
+
+      this.submitButton.disabled = true;
+      this.submitButton.setText('Fetching...');
+      this.statusEl.setText('');
+
+      try {
+        await this.onSubmit(value);
+        this.close();
+      } catch (error) {
+        this.statusEl.setText(
+          error instanceof Error ? error.message : String(error)
+        );
+      } finally {
+        this.submitButton.disabled = false;
+        this.submitButton.setText('Fetch items');
+      }
+    });
+
+    this.inputEl.focus();
+  }
+
+  onClose() {
+    this.modalEl.removeClass('zt-monitor-modal-shell');
+    this.contentEl.empty();
+  }
+}
+
+class ZoteroItemImportModal extends Modal {
   private selected = new Set<string>();
   private selectionAnchorKey: string | null = null;
-  private quickSelect: MonitorSelectionMode = 'today';
+  private quickSelect: MonitorSelectionMode;
   private searchTerm = '';
   private sortKey: MonitorSortKey = 'dateAdded';
   private sortDirection: MonitorSortDirection = 'desc';
@@ -183,14 +654,18 @@ class ZoteroMissingItemsModal extends Modal {
     app: App,
     private items: ZoteroMonitorItem[],
     tableColumns: string[],
+    private title: string,
+    private description: string,
     private filterSummary: string[],
     private onImport: (
       items: ZoteroMonitorItem[],
       properties: ZoteroManagedUserProperties
     ) => Promise<string[]>,
-    private onFinished: () => void
+    private onFinished: () => void,
+    initialSelection: MonitorQuickSelect = 'today'
   ) {
     super(app);
+    this.quickSelect = initialSelection;
     this.tableColumns = normalizeZoteroItemTableColumns(tableColumns);
 
     if (!this.tableColumns.includes(this.sortKey)) {
@@ -201,7 +676,10 @@ class ZoteroMissingItemsModal extends Modal {
     }
 
     for (const item of items) {
-      if (this.isItemFromToday(item)) {
+      if (
+        initialSelection === 'all' ||
+        (initialSelection === 'today' && this.isItemFromToday(item))
+      ) {
         this.selected.add(itemIdentity(item));
       }
     }
@@ -218,12 +696,8 @@ class ZoteroMissingItemsModal extends Modal {
 
     const container = contentEl.createDiv('zt-monitor-modal');
     const header = container.createDiv('zt-monitor-header');
-    header.createEl('h2', { text: 'Missing Zotero literature notes' });
-    header.createEl('p', {
-      text: `${this.items.length} Zotero item${
-        this.items.length === 1 ? '' : 's'
-      } are not represented by Obsidian note properties.`,
-    });
+    header.createEl('h2', { text: this.title });
+    header.createEl('p', { text: this.description });
     const filters = header.createDiv('zt-monitor-filter-summary');
     for (const filter of this.filterSummary) {
       filters.createSpan({ cls: 'zt-monitor-filter-chip', text: filter });
@@ -841,6 +1315,300 @@ class ZoteroMissingItemsModal extends Modal {
   }
 }
 
+class ZoteroUpdateNotesModal extends Modal {
+  private selected = new Set<string>();
+  private listEl: HTMLDivElement;
+  private updateButton: HTMLButtonElement;
+  private summaryEl: HTMLDivElement;
+  private tableColumns: ZoteroItemTableColumn[];
+
+  constructor(
+    app: App,
+    private notes: MatchedLiteratureNote[],
+    tableColumns: string[],
+    private onUpdate: (notes: MatchedLiteratureNote[]) => Promise<void>,
+    private onFinished: () => void
+  ) {
+    super(app);
+    this.tableColumns = normalizeZoteroItemTableColumns(tableColumns);
+
+    for (const note of notes) {
+      this.selected.add(note.file.path);
+    }
+  }
+
+  onOpen() {
+    this.contentEl.empty();
+    this.modalEl.addClass('zt-monitor-modal-shell');
+
+    const container = this.contentEl.createDiv('zt-monitor-modal');
+    const header = container.createDiv('zt-monitor-header');
+    header.createEl('h2', { text: 'Update existing Zotero notes' });
+    header.createEl('p', {
+      text: `${this.notes.length} Obsidian literature note${
+        this.notes.length === 1 ? '' : 's'
+      } can be refreshed from Zotero.`,
+    });
+
+    const actionBar = container.createDiv('zt-monitor-action-bar');
+    this.summaryEl = actionBar.createDiv('zt-monitor-action-summary');
+    const buttons = actionBar.createDiv('zt-monitor-buttons');
+    const cancelButton = buttons.createEl('button', { text: 'Cancel' });
+    cancelButton.type = 'button';
+    cancelButton.addEventListener('click', () => this.close());
+
+    this.updateButton = buttons.createEl('button', {
+      text: 'Update selected',
+    });
+    this.updateButton.type = 'button';
+    this.updateButton.addClass('mod-cta');
+    this.updateButton.addEventListener('click', async () => {
+      const selectedNotes = this.getSelectedNotes();
+      if (!selectedNotes.length) return;
+
+      this.updateButton.disabled = true;
+      this.updateButton.setText('Updating...');
+
+      try {
+        await this.onUpdate(selectedNotes);
+        this.close();
+      } catch (error) {
+        new Notice('Failed to update selected Zotero notes.', 10000);
+        console.error(error);
+        this.updateButton.disabled = false;
+        this.updateButton.setText('Update selected');
+      }
+    });
+
+    this.listEl = container.createDiv('zt-monitor-list');
+    this.renderList();
+  }
+
+  onClose() {
+    this.modalEl.removeClass('zt-monitor-modal-shell');
+    this.contentEl.empty();
+    this.onFinished();
+  }
+
+  private getSelectedNotes(): MatchedLiteratureNote[] {
+    return this.notes.filter((note) => this.selected.has(note.file.path));
+  }
+
+  private updateSummary() {
+    const selectedCount = this.getSelectedNotes().length;
+    this.summaryEl.setText(`${selectedCount} of ${this.notes.length} selected`);
+    this.updateButton.disabled = selectedCount === 0;
+    this.updateButton.setText(`Update selected (${selectedCount})`);
+  }
+
+  private renderList() {
+    this.listEl.empty();
+
+    const table = this.listEl.createEl('table', {
+      cls: 'zt-monitor-table zt-update-notes-table',
+    });
+    const header = table.createEl('thead').createEl('tr');
+    header.createEl('th', { cls: 'zt-monitor-table-check' });
+    header.createEl('th', { text: 'Note', cls: 'zt-monitor-table-note' });
+
+    for (const column of this.tableColumns) {
+      header.createEl('th', {
+        text: ZOTERO_ITEM_TABLE_COLUMN_BY_KEY[column].label,
+        cls: ZOTERO_ITEM_TABLE_COLUMN_BY_KEY[column].className,
+      });
+    }
+
+    const body = table.createEl('tbody');
+    for (const note of this.notes) {
+      const row = body.createEl('tr');
+      row.toggleClass('is-selected', this.selected.has(note.file.path));
+
+      const checkbox = row
+        .createEl('td', { cls: 'zt-monitor-table-check' })
+        .createEl('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = this.selected.has(note.file.path);
+
+      const setSelected = (selected: boolean) => {
+        checkbox.checked = selected;
+        if (selected) {
+          this.selected.add(note.file.path);
+        } else {
+          this.selected.delete(note.file.path);
+        }
+        row.toggleClass('is-selected', selected);
+        this.updateSummary();
+      };
+
+      checkbox.addEventListener('change', () => setSelected(checkbox.checked));
+      row.addEventListener('click', (event) => {
+        if (shouldIgnoreRowSelectionClick(event.target)) return;
+        setSelected(!checkbox.checked);
+      });
+
+      row.createEl('td', {
+        cls: 'zt-monitor-table-note',
+        text: note.file.path,
+      });
+
+      for (const column of this.tableColumns) {
+        renderConfiguredItemCell(row, note.item, column);
+      }
+    }
+
+    this.updateSummary();
+  }
+}
+
+class ZoteroOrphanedNotesModal extends Modal {
+  private selected = new Set<string>();
+  private listEl: HTMLDivElement;
+  private flagButton: HTMLButtonElement;
+  private summaryEl: HTMLDivElement;
+
+  constructor(
+    app: App,
+    private notes: OrphanedLiteratureNote[],
+    private orphanedProperty: string,
+    private onFlag: (notes: OrphanedLiteratureNote[]) => Promise<void>,
+    private onFinished: () => void
+  ) {
+    super(app);
+
+    for (const note of notes) {
+      this.selected.add(note.file.path);
+    }
+  }
+
+  onOpen() {
+    this.contentEl.empty();
+    this.modalEl.addClass('zt-monitor-modal-shell');
+
+    const container = this.contentEl.createDiv('zt-monitor-modal');
+    const header = container.createDiv('zt-monitor-header');
+    header.createEl('h2', { text: 'Notes without Zotero item' });
+    header.createEl('p', {
+      text: `${this.notes.length} Obsidian literature note${
+        this.notes.length === 1 ? '' : 's'
+      } have Zotero identity metadata but no matching Zotero item.`,
+    });
+
+    const actionBar = container.createDiv('zt-monitor-action-bar');
+    this.summaryEl = actionBar.createDiv('zt-monitor-action-summary');
+    const buttons = actionBar.createDiv('zt-monitor-buttons');
+    const cancelButton = buttons.createEl('button', { text: 'Cancel' });
+    cancelButton.type = 'button';
+    cancelButton.addEventListener('click', () => this.close());
+
+    this.flagButton = buttons.createEl('button', {
+      text: 'Flag selected',
+    });
+    this.flagButton.type = 'button';
+    this.flagButton.addClass('mod-cta');
+    this.flagButton.addEventListener('click', async () => {
+      const selectedNotes = this.getSelectedNotes();
+      if (!selectedNotes.length) return;
+
+      this.flagButton.disabled = true;
+      this.flagButton.setText('Flagging...');
+
+      try {
+        await this.onFlag(selectedNotes);
+        this.close();
+      } catch (error) {
+        new Notice('Failed to flag selected orphaned notes.', 10000);
+        console.error(error);
+        this.flagButton.disabled = false;
+        this.flagButton.setText('Flag selected');
+      }
+    });
+
+    this.listEl = container.createDiv('zt-monitor-list');
+    this.renderList();
+  }
+
+  onClose() {
+    this.modalEl.removeClass('zt-monitor-modal-shell');
+    this.contentEl.empty();
+    this.onFinished();
+  }
+
+  private getSelectedNotes(): OrphanedLiteratureNote[] {
+    return this.notes.filter((note) => this.selected.has(note.file.path));
+  }
+
+  private updateSummary() {
+    const selectedCount = this.getSelectedNotes().length;
+    this.summaryEl.setText(
+      `${selectedCount} of ${this.notes.length} selected. Flag property: ${this.orphanedProperty}`
+    );
+    this.flagButton.disabled = selectedCount === 0;
+    this.flagButton.setText(`Flag selected (${selectedCount})`);
+  }
+
+  private renderList() {
+    this.listEl.empty();
+
+    const table = this.listEl.createEl('table', {
+      cls: 'zt-monitor-table zt-orphaned-notes-table',
+    });
+    const header = table.createEl('thead').createEl('tr');
+    header.createEl('th', { cls: 'zt-monitor-table-check' });
+    header.createEl('th', { text: 'Note', cls: 'zt-monitor-table-note' });
+    header.createEl('th', { text: 'Citekey', cls: 'zt-monitor-table-citekey' });
+    header.createEl('th', { text: 'Library', cls: 'zt-monitor-table-library' });
+    header.createEl('th', { text: 'Reason', cls: 'zt-monitor-table-scopes' });
+
+    const body = table.createEl('tbody');
+    for (const note of this.notes) {
+      const row = body.createEl('tr');
+      row.toggleClass('is-selected', this.selected.has(note.file.path));
+
+      const checkbox = row
+        .createEl('td', { cls: 'zt-monitor-table-check' })
+        .createEl('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = this.selected.has(note.file.path);
+
+      const setSelected = (selected: boolean) => {
+        checkbox.checked = selected;
+        if (selected) {
+          this.selected.add(note.file.path);
+        } else {
+          this.selected.delete(note.file.path);
+        }
+        row.toggleClass('is-selected', selected);
+        this.updateSummary();
+      };
+
+      checkbox.addEventListener('change', () => setSelected(checkbox.checked));
+      row.addEventListener('click', (event) => {
+        if (shouldIgnoreRowSelectionClick(event.target)) return;
+        setSelected(!checkbox.checked);
+      });
+
+      row.createEl('td', {
+        cls: 'zt-monitor-table-note',
+        text: note.file.path,
+      });
+      row.createEl('td', {
+        cls: 'zt-monitor-table-citekey',
+        text: note.citekey || '',
+      });
+      row.createEl('td', {
+        cls: 'zt-monitor-table-library',
+        text: note.libraryID ? String(note.libraryID) : '',
+      });
+      row.createEl('td', {
+        cls: 'zt-monitor-table-scopes',
+        text: note.reason,
+      });
+    }
+
+    this.updateSummary();
+  }
+}
+
 export class ZoteroMonitor {
   private intervalId: number | null = null;
   private preloadTimeoutId: number | null = null;
@@ -904,6 +1672,156 @@ export class ZoteroMonitor {
 
   async runManualCheck() {
     await this.runCheck(true);
+  }
+
+  async runDirectImport() {
+    new ZoteroDirectImportRequestModal(this.plugin.app, async (value) => {
+      const items = await this.getRequestedImportItems(value);
+
+      if (!items.length) {
+        throw new Error('No matching Zotero items found for those citekeys.');
+      }
+
+      this.openImportItemsModal(
+        items,
+        'Import specific Zotero notes',
+        `${items.length} Zotero item${
+          items.length === 1 ? '' : 's'
+        } matched the requested citekeys.`,
+        ['Source: selected citekeys', ...this.getImportFormatSummary()],
+        'all'
+      );
+    }).open();
+  }
+
+  async runUpdateNotesCheck() {
+    if (this.modalOpen) return;
+
+    this.modalOpen = true;
+    try {
+      const items = await this.getMonitorItems(true);
+      const notes = this.getExistingLiteratureNotes();
+      const matched = notes
+        .map((note) => {
+          const item = getMatchedItem(note, items);
+          return item ? ({ ...note, item } as MatchedLiteratureNote) : null;
+        })
+        .filter((note): note is MatchedLiteratureNote => !!note);
+
+      if (!matched.length) {
+        this.modalOpen = false;
+        new Notice('No existing Zotero literature notes found to update.');
+        return;
+      }
+
+      new ZoteroUpdateNotesModal(
+        this.plugin.app,
+        matched,
+        this.plugin.settings.zoteroItemTableColumns ||
+          this.plugin.settings.zoteroMonitorTableColumns ||
+          [],
+        (selectedNotes) => this.updateExistingNotes(selectedNotes),
+        () => {
+          this.modalOpen = false;
+        }
+      ).open();
+    } catch (error) {
+      this.modalOpen = false;
+      new Notice('Failed to check existing Zotero notes.', 10000);
+      console.error(error);
+    }
+  }
+
+  async runOrphanedNotesCheck() {
+    if (this.modalOpen) return;
+
+    this.modalOpen = true;
+    try {
+      const items = await this.getMonitorItems(true);
+      const orphaned = this.getExistingLiteratureNotes()
+        .filter((note) => !getMatchedItem(note, items))
+        .map((note) => ({
+          ...note,
+          reason: getOrphanReason(note),
+        }));
+
+      if (!orphaned.length) {
+        this.modalOpen = false;
+        new Notice('No Obsidian literature notes without Zotero items found.');
+        return;
+      }
+
+      new ZoteroOrphanedNotesModal(
+        this.plugin.app,
+        orphaned,
+        this.getOrphanedProperty(),
+        (selectedNotes) => this.flagOrphanedNotes(selectedNotes),
+        () => {
+          this.modalOpen = false;
+        }
+      ).open();
+    } catch (error) {
+      this.modalOpen = false;
+      new Notice('Failed to check for notes without Zotero items.', 10000);
+      console.error(error);
+    }
+  }
+
+  async runSciteMetadataRefresh() {
+    const files = this.plugin.app.vault.getMarkdownFiles();
+    let refreshed = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    const notice = new Notice('Refreshing scite metadata...', 0);
+
+    for (const file of files) {
+      const frontmatter =
+        this.plugin.app.metadataCache.getFileCache(file)?.frontmatter;
+      if (!frontmatter) {
+        skipped += 1;
+        continue;
+      }
+
+      const doi = getNoteDoi(frontmatter as Record<string, any>);
+      if (!doi) {
+        skipped += 1;
+        continue;
+      }
+
+      try {
+        const properties = await fetchSciteTallies(
+          doi,
+          this.plugin.settings.zoteroSciteApiToken
+        );
+        await this.plugin.app.fileManager.processFrontMatter(
+          file,
+          (targetFrontmatter) => {
+            for (const key of SCITE_PROPERTIES) {
+              delete targetFrontmatter[key];
+            }
+
+            for (const [key, value] of Object.entries(properties)) {
+              if (value !== undefined) {
+                targetFrontmatter[key] = value;
+              }
+            }
+          }
+        );
+        refreshed += 1;
+      } catch (error) {
+        failed += 1;
+        console.error(error);
+      }
+    }
+
+    notice.hide();
+    new Notice(
+      `Refreshed scite metadata for ${refreshed} note${
+        refreshed === 1 ? '' : 's'
+      }. ${skipped} skipped, ${failed} failed.`,
+      10000
+    );
   }
 
   async runAutomaticCheck() {
@@ -1014,19 +1932,15 @@ export class ZoteroMonitor {
   }
 
   private openMissingItemsModal(missing: ZoteroMonitorItem[]) {
-      this.modalOpen = true;
-      new ZoteroMissingItemsModal(
-        this.plugin.app,
-        missing,
-        this.plugin.settings.zoteroItemTableColumns ||
-          this.plugin.settings.zoteroMonitorTableColumns ||
-          [],
-        this.getFilterSummary(),
-        (items, properties) => this.importItems(items, properties),
-        () => {
-          this.modalOpen = false;
-        }
-      ).open();
+    this.openImportItemsModal(
+      missing,
+      'Missing Zotero literature notes',
+      `${missing.length} Zotero item${
+        missing.length === 1 ? '' : 's'
+      } are not represented by Obsidian note properties.`,
+      this.getFilterSummary(),
+      'today'
+    );
   }
 
   private getDatabase(): DatabaseWithPort {
@@ -1116,6 +2030,177 @@ export class ZoteroMonitor {
       ),
     };
     this.lastNoticeKey = '';
+  }
+
+  private getImportFormatSummary(): string[] {
+    const exportFormatName =
+      this.plugin.settings.zoteroMonitorImportFormat ||
+      this.plugin.settings.exportFormats[0]?.name ||
+      'first configured format';
+
+    return [`Import format: ${exportFormatName}`];
+  }
+
+  private getMonitorExportFormat() {
+    const exportFormatName =
+      this.plugin.settings.zoteroMonitorImportFormat ||
+      this.plugin.settings.exportFormats[0]?.name;
+
+    return this.plugin.settings.exportFormats.find(
+      (format) => format.name === exportFormatName
+    );
+  }
+
+  private getOrphanedProperty(): string {
+    return (
+      this.plugin.settings.zoteroOrphanedProperty ||
+      DEFAULT_ORPHANED_PROPERTY
+    );
+  }
+
+  private openImportItemsModal(
+    items: ZoteroMonitorItem[],
+    title: string,
+    description: string,
+    filterSummary: string[],
+    initialSelection: MonitorQuickSelect = 'today'
+  ) {
+    this.modalOpen = true;
+    new ZoteroItemImportModal(
+      this.plugin.app,
+      items,
+      this.plugin.settings.zoteroItemTableColumns ||
+        this.plugin.settings.zoteroMonitorTableColumns ||
+        [],
+      title,
+      description,
+      filterSummary,
+      (selectedItems, properties) => this.importItems(selectedItems, properties),
+      () => {
+        this.modalOpen = false;
+      },
+      initialSelection
+    ).open();
+  }
+
+  private async getRequestedImportItems(
+    value: string
+  ): Promise<ZoteroMonitorItem[]> {
+    const requested = parseRequestedCitekeys(value);
+    if (!requested.length) return [];
+
+    const items = await this.getMonitorItems(true);
+    const selected = new Map<string, ZoteroMonitorItem>();
+
+    for (const request of requested) {
+      for (const item of items) {
+        if (
+          candidateMatchesRequest(
+            {
+              citekey: item.citekey,
+              libraryID: item.libraryID,
+              title: item.title,
+            },
+            request
+          )
+        ) {
+          selected.set(itemIdentity(item), item);
+        }
+      }
+    }
+
+    return Array.from(selected.values());
+  }
+
+  private getExistingLiteratureNotes(): ExistingLiteratureNote[] {
+    const notes: ExistingLiteratureNote[] = [];
+
+    for (const file of this.plugin.app.vault.getMarkdownFiles()) {
+      const frontmatter =
+        this.plugin.app.metadataCache.getFileCache(file)?.frontmatter;
+      if (!frontmatter) continue;
+
+      const note = getExistingNoteIdentity(
+        file,
+        frontmatter as Record<string, any>
+      );
+
+      if (note) notes.push(note);
+    }
+
+    return notes;
+  }
+
+  private async updateExistingNotes(notes: MatchedLiteratureNote[]) {
+    const exportFormat = this.getMonitorExportFormat();
+    if (!exportFormat) {
+      new Notice('No Zotero import format selected for updates.', 10000);
+      return;
+    }
+
+    const database = this.getDatabase();
+    const updatedPaths: string[] = [];
+    const byLibrary = new Map<number, MatchedLiteratureNote[]>();
+
+    for (const note of notes) {
+      const libraryNotes = byLibrary.get(note.item.libraryID) || [];
+      libraryNotes.push(note);
+      byLibrary.set(note.item.libraryID, libraryNotes);
+    }
+
+    for (const libraryNotes of byLibrary.values()) {
+      const pathOverrides: Record<string, string> = {};
+      const citekeys: CiteKey[] = [];
+
+      for (const note of libraryNotes) {
+        pathOverrides[itemPathOverrideKey(note.item)] = note.file.path;
+        citekeys.push({
+          key: note.item.citekey,
+          library: note.item.libraryID,
+        });
+      }
+
+      const paths = await exportToMarkdown(
+        {
+          settings: this.plugin.settings,
+          database,
+          exportFormat,
+          forceOverwrite: true,
+          pathOverrides,
+        },
+        citekeys
+      );
+      updatedPaths.push(...paths);
+    }
+
+    await this.plugin.openNotes(updatedPaths);
+    new Notice(
+      `Updated ${updatedPaths.length} Zotero literature note${
+        updatedPaths.length === 1 ? '' : 's'
+      }.`
+    );
+  }
+
+  private async flagOrphanedNotes(notes: OrphanedLiteratureNote[]) {
+    const property = this.getOrphanedProperty();
+    const checkedAt = new Date().toISOString();
+
+    for (const note of notes) {
+      await this.plugin.app.fileManager.processFrontMatter(
+        note.file,
+        (frontmatter) => {
+          frontmatter[property] = true;
+          frontmatter[ORPHANED_CHECKED_AT_PROPERTY] = checkedAt;
+          frontmatter[ORPHANED_REASON_PROPERTY] = note.reason;
+        }
+      );
+    }
+
+    new Notice(
+      `Flagged ${notes.length} Obsidian literature note${
+        notes.length === 1 ? '' : 's'
+      } without Zotero items.`
+    );
   }
 
   private getScope(): ZoteroMonitorScope {
@@ -1266,12 +2351,7 @@ export class ZoteroMonitor {
     items: ZoteroMonitorItem[],
     managedProperties: ZoteroManagedUserProperties
   ): Promise<string[]> {
-    const exportFormatName =
-      this.plugin.settings.zoteroMonitorImportFormat ||
-      this.plugin.settings.exportFormats[0]?.name;
-    const exportFormat = this.plugin.settings.exportFormats.find(
-      (format) => format.name === exportFormatName
-    );
+    const exportFormat = this.getMonitorExportFormat();
 
     if (!exportFormat) {
       new Notice('No Zotero import format selected for the monitor.', 10000);

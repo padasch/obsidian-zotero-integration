@@ -56,6 +56,11 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   zoteroMonitorTagScope: [],
   zoteroMonitorImportFormat: '',
   zoteroItemTableColumns: DEFAULT_ZOTERO_ITEM_TABLE_COLUMNS.slice(),
+  zoteroOrphanedProperty: 'zoteroOrphaned',
+  zoteroSciteApiToken: '',
+  zoteroSciteEnabled: false,
+  zoteroSciteRefreshIntervalDays: 7,
+  zoteroSciteRefreshOnImport: true,
 };
 
 async function fixPath() {
@@ -142,7 +147,7 @@ export default class ZoteroConnector extends Plugin {
 
     this.addCommand({
       id: 'show-zotero-debug-view',
-      name: 'Data explorer',
+      name: 'Test import template',
       callback: () => {
         this.activateDataExplorer();
       },
@@ -150,9 +155,41 @@ export default class ZoteroConnector extends Plugin {
 
     this.addCommand({
       id: 'zdc-check-missing-literature',
-      name: 'Find missing Zotero literature notes',
+      name: 'Import missing notes (batch import)',
       callback: () => {
         this.zoteroMonitor.runManualCheck();
+      },
+    });
+
+    this.addCommand({
+      id: 'zdc-import-specific-literature',
+      name: 'Import specific notes',
+      callback: () => {
+        this.zoteroMonitor.runDirectImport();
+      },
+    });
+
+    this.addCommand({
+      id: 'zdc-check-orphaned-literature',
+      name: 'Find notes without Zotero item',
+      callback: () => {
+        this.zoteroMonitor.runOrphanedNotesCheck();
+      },
+    });
+
+    this.addCommand({
+      id: 'zdc-refresh-scite-metadata',
+      name: 'Refresh scite metadata',
+      callback: () => {
+        this.zoteroMonitor.runSciteMetadataRefresh();
+      },
+    });
+
+    this.addCommand({
+      id: 'zdc-update-literature-notes',
+      name: 'Update existing notes',
+      callback: () => {
+        this.zoteroMonitor.runUpdateNotesCheck();
       },
     });
 
@@ -232,7 +269,10 @@ export default class ZoteroConnector extends Plugin {
   addExportCommand(format: ExportFormat) {
     this.addCommand({
       id: `${exportCommandIDPrefix}${format.name}`,
-      name: format.name,
+      name:
+        format.name === 'Literature Note'
+          ? 'Import/update via Zotero picker'
+          : `Import/update via Zotero picker: ${format.name}`,
       callback: async () => {
         const database = {
           database: this.settings.database,
