@@ -1,4 +1,4 @@
-import { FuzzySuggestModal, TFolder } from 'obsidian';
+import { FuzzySuggestModal, TFile, TFolder } from 'obsidian';
 
 import { cslList, cslListRaw } from './cslList';
 
@@ -91,6 +91,16 @@ export function getMarkdownFileOptions(): FinderOption[] {
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
+export function getMarkdownOrBaseFileOptions(): FinderOption[] {
+  return app.vault
+    .getFiles()
+    .filter((file): file is TFile =>
+      ['md', 'base'].includes(file.extension)
+    )
+    .map((file) => ({ value: file.path, label: file.path }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export function getFolderOptions(): FinderOption[] {
   return app.vault
     .getAllLoadedFiles()
@@ -156,6 +166,15 @@ export function openMarkdownFilePicker(onChoose: (value: string) => void) {
   openFinderPicker(getMarkdownFileOptions(), onChoose, {
     placeholder: 'Choose a markdown file',
     emptyStateText: 'No markdown files found.',
+  });
+}
+
+export function openMarkdownOrBaseFilePicker(
+  onChoose: (value: string) => void
+) {
+  openFinderPicker(getMarkdownOrBaseFileOptions(), onChoose, {
+    placeholder: 'Choose a markdown or base file',
+    emptyStateText: 'No markdown or base files found.',
   });
 }
 

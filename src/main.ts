@@ -1,5 +1,12 @@
 import Fuse from 'fuse.js';
-import { EditableFileView, Events, Notice, Plugin, TFile } from 'obsidian';
+import {
+  EditableFileView,
+  Events,
+  Notice,
+  Plugin,
+  TFile,
+  WorkspaceLeaf,
+} from 'obsidian';
 import { shellPath } from 'shell-path';
 
 import { DataExplorerView, viewType } from './DataExplorerView';
@@ -70,6 +77,11 @@ function normalizeExportFormats(formats: ExportFormat[]): ExportFormat[] {
 
     return normalized;
   });
+}
+
+function getLeafFile(leaf: WorkspaceLeaf): TFile | null {
+  const file = (leaf.view as Partial<EditableFileView> | undefined)?.file;
+  return file instanceof TFile ? file : null;
 }
 
 const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
@@ -368,12 +380,11 @@ export default class ZoteroConnector extends Plugin {
     // A better solution could surely be found to refresh the vault, but I am not sure how to proceed!
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    const leaves = this.app.workspace.getLeavesOfType('markdown');
+    const leaves: WorkspaceLeaf[] = [];
+    this.app.workspace.iterateAllLeaves((leaf) => leaves.push(leaf));
     for (const path of pathOfNotesToOpen) {
       const note = this.app.vault.getAbstractFileByPath(path);
-      const open = leaves.find(
-        (leaf) => (leaf.view as EditableFileView).file === note
-      );
+      const open = leaves.find((leaf) => getLeafFile(leaf) === note);
       if (open) {
         app.workspace.revealLeaf(open);
       } else if (note instanceof TFile) {

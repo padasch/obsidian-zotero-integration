@@ -24,7 +24,10 @@ import { CiteFormatSettings } from './CiteFormatSettings';
 import { ExportFormatSettings } from './ExportFormatSettings';
 import { Icon } from './Icon';
 import { SettingItem } from './SettingItem';
-import { openFolderPicker, openMarkdownFilePicker } from './select.helpers';
+import {
+  openFolderPicker,
+  openMarkdownOrBaseFilePicker,
+} from './select.helpers';
 import { getInvalidPreservedProperties } from './validation';
 
 interface SettingsComponentProps {
@@ -406,13 +409,13 @@ function SettingsComponent({
         </SettingItem>
         <SettingItem
           name="Open specific file after import"
-          description="Optional. Open this markdown file after a successful import or update, for example a Bases literature overview."
+          description="Optional. Open this markdown or base file after a successful import or update, for example a Bases literature overview."
         >
           <div className="zt-picker-field">
             <input
               type="text"
               value={openFileAfterImportPath}
-              placeholder="Type a note path or choose one"
+              placeholder="Type a note or base path, or choose one"
               onInput={(e) =>
                 onChangeOpenFileAfterImportPath(
                   (e.target as HTMLInputElement).value
@@ -424,7 +427,7 @@ function SettingsComponent({
               className="clickable-icon setting-editor-extra-setting-button zt-picker-button"
               aria-label="Choose file to open after import"
               onClick={() =>
-                openMarkdownFilePicker(onChangeOpenFileAfterImportPath)
+                openMarkdownOrBaseFilePicker(onChangeOpenFileAfterImportPath)
               }
             >
               <Icon name="lucide-file-search" />
