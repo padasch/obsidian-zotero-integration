@@ -77,14 +77,22 @@ export interface ZoteroManagedUserProperties {
 }
 
 export type ZoteroMonitorAutomaticAction = 'notice' | 'modal';
-export type ZoteroMonitorTableColumn =
+export type ZoteroItemTableColumn =
   | 'title'
   | 'citekey'
+  | 'creators'
+  | 'year'
+  | 'date'
+  | 'publication'
+  | 'publisher'
+  | 'itemType'
   | 'library'
   | 'dateModified'
   | 'dateAdded'
   | 'tags'
-  | 'collections';
+  | 'collections'
+  | 'doi'
+  | 'url';
 
 export interface ZoteroMonitorScope {
   libraryScope: string[];
@@ -140,7 +148,8 @@ export interface ZoteroConnectorSettings {
   zoteroMonitorCollectionScope?: string[];
   zoteroMonitorTagScope?: string[];
   zoteroMonitorImportFormat?: string;
-  zoteroMonitorTableColumns?: ZoteroMonitorTableColumn[];
+  zoteroItemTableColumns?: string[];
+  zoteroMonitorTableColumns?: string[];
 }
 
 export interface CiteKeyExport {

@@ -22,7 +22,7 @@ Back up your vault and plugin configuration before installing, upgrading, or exp
 - Missing-reference review modal actions:
   - Import & close
   - Import & continue
-- Configurable missing-reference table columns, with tags and leaf collection paths shown separately.
+- Configurable Zotero item table columns, with text-field ordering, validation, tags, and leaf collection paths shown separately.
 - Persistent monitor notices for recently added references with quick actions:
   - Open Import
   - Background Import

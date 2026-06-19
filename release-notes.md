@@ -1,3 +1,10 @@
+* 3.2.14
+  - Replaced the monitor-specific missing-reference column setting with a global **Zotero item table columns** setting.
+  - Changed table column selection to a one-column-per-line text field where line order controls table order.
+  - Added validation warnings for unknown Zotero item table columns and unknown preserved-property entries.
+  - Added main Zotero columns including creators, year, publication, publisher, item type, DOI, and URL, with `journal` and `type` aliases.
+  - Reorganized settings into clearer sections with dividers and collapsible advanced/filter groups.
+
 * 3.2.13
   - Added Shift-click range selection to the missing-reference table.
   - Range selection uses the last normally clicked row as the anchor and selects all visible rows through the Shift-clicked row.

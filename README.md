@@ -14,7 +14,7 @@ Before installing/updating this plugin in your vault, make a backup of:
 
 ## Latest release
 
-Current plugin release: **3.2.13**.
+Current plugin release: **3.2.14**.
 
 ## Install
 
@@ -55,7 +55,7 @@ Current plugin release: **3.2.13**.
   - `Import & continue`
 - **Faster missing-reference review** through background Zotero metadata caching.
 - **Online paper links** in the missing-reference table, using DOI/publisher URL or a Scholar search fallback.
-- **Configurable missing-reference table columns** with separate tags and leaf collection path columns.
+- **Configurable Zotero item table columns** with text-field ordering, column validation, and separate tags / leaf collection path columns.
 - **Row-click selection** in the missing-reference table, while links and controls keep their normal behavior.
 - **Shift-click range selection** in the missing-reference table.
 - Cleaner and slimmer settings documentation and CSS cleanup, with legacy screenshot assets removed from the repository.
@@ -70,7 +70,13 @@ The monitor watches for missing literature notes and can run:
 - on a recurring interval
 - manually via **Check Zotero now**
 
-You can control how many recent days it considers (`Recent Zotero items`), scope (library/collections/tags), which import format should be used for automatic/background imports, and which columns are shown in the missing-reference table.
+You can control how many recent days it considers (`Recent Zotero items`), scope (library/collections/tags), and which import format should be used for automatic/background imports.
+
+### Zotero item tables and preserved properties
+
+The **Zotero item table columns** setting controls item tables used by Zotero import/review workflows. Enter one column key per line; the order of the lines controls the order of the table. Supported columns include `title`, `citekey`, `creators`, `year`, `date`, `publication`, `publisher`, `itemType`, `dateAdded`, `tags`, `collections`, `doi`, and `url`.
+
+The **Preserved properties** setting also uses one property per line. Both settings show warnings for entries the plugin cannot match.
 
 ### Default-style folder/file/style entry fields
 

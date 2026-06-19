@@ -84,6 +84,115 @@
   flex: 0 0 auto;
 }
 
+.zt-settings-root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-4);
+}
+
+.zt-settings-section {
+  display: block;
+}
+
+.zt-settings-section-heading {
+  margin: 0 0 var(--size-4-3);
+}
+
+.zt-settings-section-title {
+  color: var(--text-normal);
+  line-height: 1.2;
+  margin: 0;
+}
+
+h2.zt-settings-section-title {
+  font-size: var(--font-ui-large);
+}
+
+h3.zt-settings-section-title {
+  font-size: var(--font-ui-medium);
+}
+
+.zt-settings-section-description {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  line-height: 1.4;
+  margin: var(--size-4-1) 0 0;
+}
+
+.zt-settings-divider {
+  border: 0;
+  border-top: 1px solid var(--background-modifier-border);
+  margin: 0;
+}
+
+.zt-settings-section-collapsible {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  margin-top: var(--size-4-3);
+  padding: var(--size-4-2) var(--size-4-3);
+}
+
+.zt-settings-section-collapsible > summary {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-1);
+  list-style-position: inside;
+}
+
+.zt-settings-section-collapsible > summary > span {
+  color: var(--text-normal);
+  font-size: var(--font-ui-medium);
+  font-weight: 600;
+}
+
+.zt-settings-section-collapsible > summary > small {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 400;
+}
+
+.zt-settings-section-collapsible > .zt-settings-section-body {
+  margin-top: var(--size-4-3);
+}
+
+.zt-settings-textarea-field {
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+  max-width: min(100%, 560px);
+  width: 100%;
+}
+
+.zt-settings-textarea-field textarea {
+  resize: vertical;
+  width: 100%;
+}
+
+.zt-settings-field-note {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.35;
+  margin: 0;
+}
+
+.zt-settings-warning {
+  color: var(--text-warning);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--font-ui-smaller);
+  gap: var(--size-4-1);
+  line-height: 1.35;
+}
+
+.zt-settings-warning code {
+  background-color: var(--background-secondary-alt);
+  border-radius: var(--radius-s);
+  color: inherit;
+  padding: 0 0.3em;
+}
+
 .zt-finder-suggestion-title {
   color: var(--text-normal);
   font-weight: 600;
@@ -325,26 +434,6 @@
   display: inline-block;
   height: 0.9rem;
   width: 0.9rem;
-}
-
-.zt-monitor-column-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--size-4-2);
-  justify-content: flex-end;
-}
-
-.zt-monitor-column-option {
-  align-items: center;
-  border-radius: var(--radius-s);
-  display: inline-flex;
-  gap: var(--size-4-2);
-  min-height: 0;
-  padding: 0.35rem 0.6rem;
-}
-
-.zt-monitor-column-option .checkbox-container {
-  pointer-events: none;
 }
 
 @keyframes bblFadInOut {
@@ -679,6 +768,23 @@
 .zt-monitor-table-citekey {
   overflow-wrap: anywhere;
   width: 15%;
+}
+
+.zt-monitor-table-creators,
+.zt-monitor-table-publication,
+.zt-monitor-table-publisher,
+.zt-monitor-table-doi,
+.zt-monitor-table-url {
+  overflow-wrap: anywhere;
+}
+
+.zt-monitor-table-year {
+  width: 5rem;
+}
+
+.zt-monitor-table-type {
+  overflow-wrap: anywhere;
+  width: 8rem;
 }
 
 .zt-monitor-table-library {

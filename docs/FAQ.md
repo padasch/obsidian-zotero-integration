@@ -47,7 +47,7 @@ The monitor notice is shown persistently and stays visible until acted on. It in
 - **Background Import**: imports immediately with default managed properties
 - **Ignore**: dismisses the notice
 
-If the monitor is quiet, check monitor settings (`Monitor` section) for:
+If the monitor is quiet, check monitor settings (`Missing references and monitor` section) for:
 
 - time window (`last X days`)
 - selected libraries / collections / tags
@@ -64,7 +64,7 @@ Yes. Use **Open Import** from the monitor notice or **Check now** in settings. I
 
 Zotero/Better BibTeX can return parent and child collection paths for the same item. The monitor now shows only the deepest collection path for display and search. For example, if Zotero reports `topics`, `topics/coding`, and `topics/coding/r`, the table shows `topics/coding/r`.
 
-You can choose which columns appear in the modal under **Settings -> Zotero Monitor -> Missing-reference table columns**.
+You can choose which columns appear in Zotero item tables under **Settings -> Metadata and properties -> Zotero item table columns**. Enter one column key per line; `journal` is accepted as an alias for `publication`, and `type` is accepted as an alias for `itemType`.
 
 ## Unanswered questions
 - What is the difference between the various BibTeX and CSL-based configurations?

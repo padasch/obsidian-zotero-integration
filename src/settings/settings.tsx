@@ -9,15 +9,15 @@ import {
   ZOTERO_ANNOTATION_COLOR_HEX,
 } from '../ZoteroManagedProperties';
 import {
-  normalizeMonitorTableColumns,
-  ZOTERO_MONITOR_TABLE_COLUMN_OPTIONS,
-} from '../ZoteroMonitor.columns';
+  getInvalidZoteroItemTableColumns,
+  getZoteroItemTableColumnHelp,
+  normalizeZoteroItemTableColumns,
+} from '../ZoteroItemTable.columns';
 import { formatScopeInput, splitScopeInput } from '../ZoteroMonitor.helpers';
 import {
   CitationFormat,
   ExportFormat,
   ZoteroConnectorSettings,
-  ZoteroMonitorTableColumn,
 } from '../types';
 import { AssetDownloader } from './AssetDownloader';
 import { CiteFormatSettings } from './CiteFormatSettings';
@@ -25,8 +25,10 @@ import { ExportFormatSettings } from './ExportFormatSettings';
 import { Icon } from './Icon';
 import { SettingItem } from './SettingItem';
 import { openFolderPicker } from './select.helpers';
+import { getInvalidPreservedProperties } from './validation';
 
 interface SettingsComponentProps {
+  app: App;
   settings: ZoteroConnectorSettings;
   addCiteFormat: (format: CitationFormat) => CitationFormat[];
   updateCiteFormat: (index: number, format: CitationFormat) => CitationFormat[];
@@ -49,7 +51,96 @@ function formatLineInput(value?: string[]): string {
   return (value || []).join('\n');
 }
 
+function getVaultPropertyKeys(app: App): Set<string> {
+  const keys = new Set<string>();
+
+  for (const file of app.vault.getMarkdownFiles()) {
+    const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
+    if (!frontmatter) continue;
+
+    for (const key of Object.keys(frontmatter)) {
+      keys.add(key);
+    }
+  }
+
+  return keys;
+}
+
+function SettingsDivider() {
+  return <hr className="zt-settings-divider" />;
+}
+
+function SettingsSection({
+  title,
+  description,
+  children,
+  collapsible,
+  defaultOpen = true,
+  level = 2,
+}: React.PropsWithChildren<{
+  title: string;
+  description?: string;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+  level?: 2 | 3;
+}>) {
+  const heading =
+    level === 3 ? (
+      <h3 className="zt-settings-section-title">{title}</h3>
+    ) : (
+      <h2 className="zt-settings-section-title">{title}</h2>
+    );
+
+  const body = (
+    <>
+      <div className="zt-settings-section-heading">
+        {heading}
+        {description ? (
+          <p className="zt-settings-section-description">{description}</p>
+        ) : null}
+      </div>
+      <div className="zt-settings-section-body">{children}</div>
+    </>
+  );
+
+  if (collapsible) {
+    return (
+      <details
+        className="zt-settings-section zt-settings-section-collapsible"
+        open={defaultOpen}
+      >
+        <summary>
+          <span>{title}</span>
+          {description ? <small>{description}</small> : null}
+        </summary>
+        <div className="zt-settings-section-body">{children}</div>
+      </details>
+    );
+  }
+
+  return <section className="zt-settings-section">{body}</section>;
+}
+
+function ValidationWarning({
+  label,
+  values,
+}: {
+  label: string;
+  values: string[];
+}) {
+  if (!values.length) return null;
+
+  return (
+    <div className="zt-settings-warning">
+      {label}: {values.map((value) => (
+        <code key={value}>{value}</code>
+      ))}
+    </div>
+  );
+}
+
 function SettingsComponent({
+  app,
   settings,
   addCiteFormat,
   updateCiteFormat,
@@ -83,10 +174,18 @@ function SettingsComponent({
     !!settings.zoteroMonitorCheckOnStartup
   );
 
-  const [zoteroMonitorTableColumns, setZoteroMonitorTableColumns] =
+  const [zoteroItemTableColumnsText, setZoteroItemTableColumnsText] =
     React.useState(() =>
-      normalizeMonitorTableColumns(settings.zoteroMonitorTableColumns)
+      formatLineInput(
+        normalizeZoteroItemTableColumns(
+          settings.zoteroItemTableColumns ||
+            settings.zoteroMonitorTableColumns
+        )
+      )
     );
+
+  const [preservedPropertiesText, setPreservedPropertiesText] =
+    React.useState(() => formatLineInput(settings.zoteroPreservedProperties));
 
   const [taskAnnotationColors, setTaskAnnotationColors] = React.useState(
     settings.zoteroTaskAnnotationColors || []
@@ -148,25 +247,6 @@ function SettingsComponent({
     [removeExportFormat]
   );
 
-  const toggleMonitorTableColumn = React.useCallback(
-    (column: ZoteroMonitorTableColumn) => {
-      setZoteroMonitorTableColumns((state) => {
-        const next = state.includes(column)
-          ? state.filter((item) => item !== column)
-          : [...state, column];
-
-        if (!next.length) {
-          return state;
-        }
-
-        const normalized = normalizeMonitorTableColumns(next);
-        updateSetting('zoteroMonitorTableColumns', normalized);
-        return normalized;
-      });
-    },
-    [updateSetting]
-  );
-
   const tessPathRef = React.useRef<HTMLInputElement>(null);
   const tessDataPathRef = React.useRef<HTMLInputElement>(null);
 
@@ -190,604 +270,642 @@ function SettingsComponent({
     [updateSetting]
   );
 
+  const zoteroItemTableColumns = React.useMemo(
+    () => splitLineInput(zoteroItemTableColumnsText),
+    [zoteroItemTableColumnsText]
+  );
+  const invalidZoteroItemTableColumns = React.useMemo(
+    () => getInvalidZoteroItemTableColumns(zoteroItemTableColumns),
+    [zoteroItemTableColumns]
+  );
+  const preservedProperties = React.useMemo(
+    () => splitLineInput(preservedPropertiesText),
+    [preservedPropertiesText]
+  );
+  const availablePropertyKeys = React.useMemo(() => getVaultPropertyKeys(app), [
+    app,
+  ]);
+  const invalidPreservedProperties = React.useMemo(
+    () =>
+      getInvalidPreservedProperties(
+        preservedProperties,
+        availablePropertyKeys
+      ),
+    [availablePropertyKeys, preservedProperties]
+  );
+
   return (
-    <div>
-      <SettingItem name="General Settings" isHeading />
-      <AssetDownloader settings={settings} updateSetting={updateSetting} />
-      <SettingItem
-        name="Database"
-        description="Supports Zotero and Juris-M. Alternatively a custom port number can be specified."
+    <div className="zt-settings-root">
+      <SettingsSection
+        title="Import basics"
+        description="Connection and default behavior for importing Zotero notes."
       >
-        <select
-          className="dropdown"
-          defaultValue={settings.database}
-          onChange={(e) => {
-            const value = (e.target as HTMLSelectElement).value;
-            updateSetting('database', value);
-            if (value === 'Custom') {
-              setUseCustomPort(true);
-            } else {
-              setUseCustomPort(false);
-            }
-          }}
-        >
-          <option value="Zotero">Zotero</option>
-          <option value="Juris-M">Juris-M</option>
-          <option value="Custom">Custom</option>
-        </select>
-      </SettingItem>
-      {useCustomPort ? (
+        <AssetDownloader settings={settings} updateSetting={updateSetting} />
         <SettingItem
-          name="Port number"
-          description="If a custom port number has been set in Zotero, enter it here."
+          name="Database"
+          description="Supports Zotero and Juris-M. Use Custom only when Zotero is configured with a non-default port."
         >
-          <input
-            onChange={(e) =>
-              updateSetting('port', (e.target as HTMLInputElement).value)
-            }
-            type="number"
-            placeholder="Example: 23119"
-            defaultValue={settings.port}
+          <select
+            className="dropdown"
+            defaultValue={settings.database}
+            onChange={(e) => {
+              const value = (e.target as HTMLSelectElement).value;
+              updateSetting('database', value);
+              setUseCustomPort(value === 'Custom');
+            }}
+          >
+            <option value="Zotero">Zotero</option>
+            <option value="Juris-M">Juris-M</option>
+            <option value="Custom">Custom</option>
+          </select>
+        </SettingItem>
+        {useCustomPort ? (
+          <SettingItem
+            name="Port number"
+            description="If a custom port number has been set in Zotero, enter it here."
+          >
+            <input
+              onChange={(e) =>
+                updateSetting('port', (e.target as HTMLInputElement).value)
+              }
+              type="number"
+              placeholder="Example: 23119"
+              defaultValue={settings.port}
+            />
+          </SettingItem>
+        ) : null}
+        <SettingItem
+          name="Note Import Location"
+          description="Notes imported from Zotero will be added to this folder in your vault."
+        >
+          <div className="zt-picker-field">
+            <input
+              type="text"
+              value={noteImportFolder}
+              placeholder="Type a folder path or choose one"
+              onInput={(e) =>
+                onChangeNoteImportFolder((e.target as HTMLInputElement).value)
+              }
+            />
+            <button
+              type="button"
+              className="clickable-icon setting-editor-extra-setting-button zt-picker-button"
+              aria-label="Choose note import folder"
+              onClick={() => openFolderPicker(onChangeNoteImportFolder)}
+            >
+              <Icon name="lucide-folder-search" />
+            </button>
+          </div>
+        </SettingItem>
+        <SettingItem
+          name="Open notes after import"
+          description="Automatically open markdown files created or updated by imports."
+        >
+          <div
+            onClick={() => {
+              setOpenNoteAfterImport((state) => {
+                updateSetting('openNoteAfterImport', !state);
+                return !state;
+              });
+            }}
+            className={`checkbox-container${
+              openNoteAfterImportState ? ' is-enabled' : ''
+            }`}
           />
         </SettingItem>
-      ) : null}
-      <SettingItem
-        name="Note Import Location"
-        description="Notes imported from Zotero will be added to this folder in your vault"
-      >
-        <div className="zt-picker-field">
-          <input
-            type="text"
-            value={noteImportFolder}
-            placeholder="Type a folder path or choose one"
-            onInput={(e) =>
-              onChangeNoteImportFolder((e.target as HTMLInputElement).value)
+        <SettingItem
+          name="Which notes to open"
+          description="Open either the first note imported, the last note imported, or all notes in new tabs."
+        >
+          <select
+            className="dropdown"
+            defaultValue={settings.whichNotesToOpenAfterImport}
+            disabled={!openNoteAfterImportState}
+            onChange={(e) =>
+              updateSetting(
+                'whichNotesToOpenAfterImport',
+                (e.target as HTMLSelectElement).value
+              )
             }
-          />
-          <button
-            type="button"
-            className="clickable-icon setting-editor-extra-setting-button zt-picker-button"
-            aria-label="Choose note import folder"
-            onClick={() => openFolderPicker(onChangeNoteImportFolder)}
           >
-            <Icon name="lucide-folder-search" />
-          </button>
-        </div>
-      </SettingItem>
-      <SettingItem
-        name="Open the created or updated note(s) after import"
-        description="The created or updated markdown files resulting from the import will be automatically opened."
-      >
-        <div
-          onClick={() => {
-            setOpenNoteAfterImport((state) => {
-              updateSetting('openNoteAfterImport', !state);
-              return !state;
-            });
-          }}
-          className={`checkbox-container${
-            openNoteAfterImportState ? ' is-enabled' : ''
-          }`}
-        />
-      </SettingItem>
-      <SettingItem
-        name="Which notes to open after import"
-        description="Open either the first note imported, the last note imported, or all notes in new tabs."
-      >
-        <select
-          className="dropdown"
-          defaultValue={settings.whichNotesToOpenAfterImport}
-          disabled={!settings.openNoteAfterImport}
-          onChange={(e) =>
-            updateSetting(
-              'whichNotesToOpenAfterImport',
-              (e.target as HTMLSelectElement).value
-            )
-          }
+            <option value="first-imported-note">First imported note</option>
+            <option value="last-imported-note">Last imported note</option>
+            <option value="all-imported-notes">All imported notes</option>
+          </select>
+        </SettingItem>
+        <SettingItem
+          name="Annotation concatenation"
+          description="Annotations extracted from PDFs that begin with '+' will be appended to the previous annotation."
         >
-          <option value="first-imported-note">First imported note</option>
-          <option value="last-imported-note">Last imported note</option>
-          <option value="all-imported-notes">All imported notes</option>
-        </select>
-      </SettingItem>
-      <SettingItem
-        name="Enable Annotation Concatenation"
-        description="Annotations extracted from PDFs that begin with '+' will be appended to the previous annotation. Note: Annotation ordering is not always consistent and you may not always acheive the desire concatenation result"
-      >
-        <div
-          onClick={() => {
-            setConcat((state) => {
-              updateSetting('shouldConcat', !state);
-              return !state;
-            });
-          }}
-          className={`checkbox-container${concat ? ' is-enabled' : ''}`}
-        />
-      </SettingItem>
-      <SettingItem name="Managed Zotero Properties" isHeading />
-      <SettingItem
-        name="Preserved properties"
-        description="Frontmatter properties that should keep hand-edited values during re-imports. Use one property per line."
-      >
-        <textarea
-          spellCheck={false}
-          rows={6}
-          defaultValue={formatLineInput(settings.zoteroPreservedProperties)}
-          onChange={(e) =>
-            updateSetting(
-              'zoteroPreservedProperties',
-              splitLineInput((e.target as HTMLTextAreaElement).value)
-            )
-          }
-        />
-      </SettingItem>
-      <SettingItem
-        name="Annotation task colors"
-        description="Zotero annotation colors that should mark a paper as having follow-up work."
-      >
-        <div className="zt-managed-color-list">
-          {ZOTERO_ANNOTATION_COLORS.map((color) => {
-            const isEnabled = taskAnnotationColors.includes(color);
+          <div
+            onClick={() => {
+              setConcat((state) => {
+                updateSetting('shouldConcat', !state);
+                return !state;
+              });
+            }}
+            className={`checkbox-container${concat ? ' is-enabled' : ''}`}
+          />
+        </SettingItem>
+      </SettingsSection>
 
-            return (
-              <button
-                key={color}
-                type="button"
-                className={`zt-managed-color-button${
-                  isEnabled ? ' is-active' : ''
-                }`}
-                onClick={() => {
-                  setTaskAnnotationColors((state) => {
-                    const next = state.includes(color)
-                      ? state.filter((item) => item !== color)
-                      : [...state, color];
-                    updateSetting('zoteroTaskAnnotationColors', next);
-                    return next;
-                  });
-                }}
-              >
-                <span
-                  className="zt-managed-color-chip"
-                  style={{
-                    backgroundColor: ZOTERO_ANNOTATION_COLOR_HEX[color],
-                  }}
-                />
-                {color}
-              </button>
-            );
-          })}
-        </div>
-      </SettingItem>
-      <SettingItem name="Zotero Monitor" isHeading />
-      <SettingItem
-        name="Enable Zotero monitor"
-        description="Check Zotero for recently added citekeyed items that are missing Obsidian literature-note properties."
-      >
-        <div
-          onClick={() => {
-            setZoteroMonitorEnabled((state) => {
-              updateSetting('zoteroMonitorEnabled', !state);
-              return !state;
-            });
-          }}
-          className={`checkbox-container${
-            zoteroMonitorEnabled ? ' is-enabled' : ''
-          }`}
-        />
-      </SettingItem>
-      <SettingItem
-        name="Check when Obsidian starts"
-        description="Run the monitor after the workspace loads. The monitor must also be enabled."
-      >
-        <div
-          onClick={() => {
-            setZoteroMonitorStartup((state) => {
-              updateSetting('zoteroMonitorCheckOnStartup', !state);
-              return !state;
-            });
-          }}
-          className={`checkbox-container${
-            zoteroMonitorStartup ? ' is-enabled' : ''
-          }`}
-        />
-      </SettingItem>
-      <SettingItem
-        name="Check interval"
-        description="Minutes between automatic checks. Use 0 to disable recurring checks."
-      >
-        <input
-          min="0"
-          type="number"
-          defaultValue={settings.zoteroMonitorIntervalMinutes.toString()}
-          onChange={(e) =>
-            updateSetting(
-              'zoteroMonitorIntervalMinutes',
-              Number((e.target as HTMLInputElement).value)
-            )
-          }
-        />
-      </SettingItem>
-      <SettingItem
-        name="Automatic check behavior"
-        description="Choose what happens when a background check finds missing Zotero references."
-      >
-        <select
-          className="dropdown"
-          defaultValue={settings.zoteroMonitorAutomaticAction}
-          onChange={(e) =>
-            updateSetting(
-              'zoteroMonitorAutomaticAction',
-              (e.target as HTMLSelectElement).value as any
-            )
-          }
-        >
-          <option value="notice">Show notice</option>
-          <option value="modal">Open import modal</option>
-        </select>
-      </SettingItem>
-      <SettingItem
-        name="Recent Zotero items"
-        description="Only consider items added to Zotero within this many days. Leave blank for all time."
-      >
-        <input
-          min="0"
-          type="number"
-          placeholder="30"
-          defaultValue={settings.zoteroMonitorRecentDays?.toString() || ''}
-          onChange={(e) => {
-            const value = (e.target as HTMLInputElement).value;
-            updateSetting(
-              'zoteroMonitorRecentDays',
-              value === '' ? null : Number(value)
-            );
-          }}
-        />
-      </SettingItem>
-      <SettingItem
-        name="Libraries or groups"
-        description="Optional comma-separated Zotero library IDs or library/group names. Leave blank for all libraries."
-      >
-        <input
-          type="text"
-          spellCheck={false}
-          placeholder="1, My Group Library"
-          defaultValue={formatScopeInput(settings.zoteroMonitorLibraryScope)}
-          onChange={(e) =>
-            updateSetting(
-              'zoteroMonitorLibraryScope',
-              splitScopeInput((e.target as HTMLInputElement).value)
-            )
-          }
-        />
-      </SettingItem>
-      <SettingItem
-        name="Collection paths"
-        description="Optional comma-separated exact Zotero collection paths, such as Reading/Queue."
-      >
-        <input
-          type="text"
-          spellCheck={false}
-          placeholder="Reading/Queue"
-          defaultValue={formatScopeInput(settings.zoteroMonitorCollectionScope)}
-          onChange={(e) =>
-            updateSetting(
-              'zoteroMonitorCollectionScope',
-              splitScopeInput((e.target as HTMLInputElement).value)
-            )
-          }
-        />
-      </SettingItem>
-      <SettingItem
-        name="Tags"
-        description="Optional comma-separated exact Zotero tags. Leave blank for all tags."
-      >
-        <input
-          type="text"
-          spellCheck={false}
-          placeholder="to-read, paper"
-          defaultValue={formatScopeInput(settings.zoteroMonitorTagScope)}
-          onChange={(e) =>
-            updateSetting(
-              'zoteroMonitorTagScope',
-              splitScopeInput((e.target as HTMLInputElement).value)
-            )
-          }
-        />
-      </SettingItem>
-      <SettingItem
-        name="Monitor import format"
-        description="Import format used when importing selected missing items."
-      >
-        <select
-          className="dropdown"
-          defaultValue={settings.zoteroMonitorImportFormat || ''}
-          onChange={(e) =>
-            updateSetting(
-              'zoteroMonitorImportFormat',
-              (e.target as HTMLSelectElement).value
-            )
-          }
-        >
-          <option value="">First import format</option>
-          {exportFormatState.map((format, index) => (
-            <option key={index} value={format.name}>
-              {format.name}
-            </option>
-          ))}
-        </select>
-      </SettingItem>
-      <SettingItem
-        name="Missing-reference table columns"
-        description="Choose which Zotero fields are shown in the missing-reference import modal."
-      >
-        <div className="zt-monitor-column-list">
-          {ZOTERO_MONITOR_TABLE_COLUMN_OPTIONS.map((column) => {
-            const isEnabled = zoteroMonitorTableColumns.includes(column.key);
-            const isLastEnabled =
-              isEnabled && zoteroMonitorTableColumns.length === 1;
+      <SettingsDivider />
 
-            return (
-              <button
-                key={column.key}
-                type="button"
-                className={`zt-monitor-column-option${
-                  isEnabled ? ' is-active' : ''
-                }`}
-                disabled={isLastEnabled}
-                aria-pressed={isEnabled}
-                onClick={() => toggleMonitorTableColumn(column.key)}
-              >
-                <span
-                  className={`checkbox-container${
-                    isEnabled ? ' is-enabled' : ''
+      <SettingsSection
+        title="Metadata and properties"
+        description="Frontmatter behavior and shared Zotero item table display."
+      >
+        <SettingItem
+          name="Preserved properties"
+          description="Frontmatter properties that should keep hand-edited values during re-imports. Use one property per line."
+        >
+          <div className="zt-settings-textarea-field">
+            <textarea
+              spellCheck={false}
+              rows={6}
+              value={preservedPropertiesText}
+              onChange={(e) => {
+                const value = (e.target as HTMLTextAreaElement).value;
+                setPreservedPropertiesText(value);
+                updateSetting('zoteroPreservedProperties', splitLineInput(value));
+              }}
+            />
+            <p className="zt-settings-field-note">
+              Known Zotero/frontmatter keys and properties already present in
+              this vault are accepted.
+            </p>
+            <ValidationWarning
+              label="Unknown preserved properties"
+              values={invalidPreservedProperties}
+            />
+          </div>
+        </SettingItem>
+        <SettingItem
+          name="Zotero item table columns"
+          description="Columns shown by Zotero item import/review tables. Use one key per line; order controls table order."
+        >
+          <div className="zt-settings-textarea-field">
+            <textarea
+              spellCheck={false}
+              rows={8}
+              value={zoteroItemTableColumnsText}
+              onChange={(e) => {
+                const value = (e.target as HTMLTextAreaElement).value;
+                setZoteroItemTableColumnsText(value);
+                updateSetting('zoteroItemTableColumns', splitLineInput(value));
+              }}
+            />
+            <p className="zt-settings-field-note">
+              Supported keys: {getZoteroItemTableColumnHelp()}. Aliases:
+              journal uses publication, type uses itemType.
+            </p>
+            <ValidationWarning
+              label="Unknown table columns"
+              values={invalidZoteroItemTableColumns}
+            />
+          </div>
+        </SettingItem>
+        <SettingItem
+          name="Annotation task colors"
+          description="Zotero annotation colors that should mark a paper as having follow-up work."
+        >
+          <div className="zt-managed-color-list">
+            {ZOTERO_ANNOTATION_COLORS.map((color) => {
+              const isEnabled = taskAnnotationColors.includes(color);
+
+              return (
+                <button
+                  key={color}
+                  type="button"
+                  className={`zt-managed-color-button${
+                    isEnabled ? ' is-active' : ''
                   }`}
-                />
-                <span>{column.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </SettingItem>
-      <SettingItem name="Check Zotero now">
-        <button onClick={runZoteroMonitorCheck}>Check now</button>
-      </SettingItem>
-      <SettingItem name="Citation Formats" isHeading />
-      <SettingItem>
-        <button onClick={addCite} className="mod-cta">
-          Add Citation Format
-        </button>
-      </SettingItem>
-      {citeFormatState.map((f, i) => {
-        return (
-          <CiteFormatSettings
-            key={i}
-            format={f}
-            index={i}
-            updateFormat={updateCite}
-            removeFormat={removeCite}
-          />
-        );
-      })}
+                  onClick={() => {
+                    setTaskAnnotationColors((state) => {
+                      const next = state.includes(color)
+                        ? state.filter((item) => item !== color)
+                        : [...state, color];
+                      updateSetting('zoteroTaskAnnotationColors', next);
+                      return next;
+                    });
+                  }}
+                >
+                  <span
+                    className="zt-managed-color-chip"
+                    style={{
+                      backgroundColor: ZOTERO_ANNOTATION_COLOR_HEX[color],
+                    }}
+                  />
+                  {color}
+                </button>
+              );
+            })}
+          </div>
+        </SettingItem>
+      </SettingsSection>
 
-      <SettingItem name="Import Formats" isHeading />
-      <SettingItem>
-        <button onClick={addExport} className="mod-cta">
-          Add Import Format
-        </button>
-      </SettingItem>
-      {exportFormatState.map((f, i) => {
-        return (
-          <ExportFormatSettings
-            key={exportFormatState.length - i}
-            format={f}
-            index={i}
-            updateFormat={updateExport}
-            removeFormat={removeExport}
-          />
-        );
-      })}
+      <SettingsDivider />
 
-      <SettingItem
-        name="Import Image Settings"
-        description="Rectangle annotations will be extracted from PDFs as images."
-        isHeading
-      />
-      <SettingItem name="Image Format">
-        <select
-          className="dropdown"
-          defaultValue={settings.pdfExportImageFormat}
-          onChange={(e) =>
-            updateSetting(
-              'pdfExportImageFormat',
-              (e.target as HTMLSelectElement).value
-            )
+      <SettingsSection
+        title="Missing references and monitor"
+        description="Find recent Zotero items that do not yet have Obsidian literature-note properties."
+      >
+        <SettingItem
+          name="Enable Zotero monitor"
+          description="Check Zotero for recently added citekeyed items that are missing Obsidian literature-note properties."
+        >
+          <div
+            onClick={() => {
+              setZoteroMonitorEnabled((state) => {
+                updateSetting('zoteroMonitorEnabled', !state);
+                return !state;
+              });
+            }}
+            className={`checkbox-container${
+              zoteroMonitorEnabled ? ' is-enabled' : ''
+            }`}
+          />
+        </SettingItem>
+        <SettingItem
+          name="Automatic check behavior"
+          description="Choose what happens when a background check finds missing Zotero references."
+        >
+          <select
+            className="dropdown"
+            defaultValue={settings.zoteroMonitorAutomaticAction}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroMonitorAutomaticAction',
+                (e.target as HTMLSelectElement).value as any
+              )
+            }
+          >
+            <option value="notice">Show notice</option>
+            <option value="modal">Open import modal</option>
+          </select>
+        </SettingItem>
+        <SettingItem
+          name="Monitor import format"
+          description="Import format used when importing selected missing items."
+        >
+          <select
+            className="dropdown"
+            defaultValue={settings.zoteroMonitorImportFormat || ''}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroMonitorImportFormat',
+                (e.target as HTMLSelectElement).value
+              )
+            }
+          >
+            <option value="">First import format</option>
+            {exportFormatState.map((format, index) => (
+              <option key={index} value={format.name}>
+                {format.name}
+              </option>
+            ))}
+          </select>
+        </SettingItem>
+        <SettingItem name="Check Zotero now">
+          <button onClick={runZoteroMonitorCheck}>Check now</button>
+        </SettingItem>
+        <SettingsSection
+          title="Monitor filters and schedule"
+          description="Narrow automatic checks by date, library, collection, or tag."
+          collapsible
+          defaultOpen={false}
+          level={3}
+        >
+          <SettingItem
+            name="Check when Obsidian starts"
+            description="Run the monitor after the workspace loads. The monitor must also be enabled."
+          >
+            <div
+              onClick={() => {
+                setZoteroMonitorStartup((state) => {
+                  updateSetting('zoteroMonitorCheckOnStartup', !state);
+                  return !state;
+                });
+              }}
+              className={`checkbox-container${
+                zoteroMonitorStartup ? ' is-enabled' : ''
+              }`}
+            />
+          </SettingItem>
+          <SettingItem
+            name="Check interval"
+            description="Minutes between automatic checks. Use 0 to disable recurring checks."
+          >
+            <input
+              min="0"
+              type="number"
+              defaultValue={settings.zoteroMonitorIntervalMinutes.toString()}
+              onChange={(e) =>
+                updateSetting(
+                  'zoteroMonitorIntervalMinutes',
+                  Number((e.target as HTMLInputElement).value)
+                )
+              }
+            />
+          </SettingItem>
+          <SettingItem
+            name="Recent Zotero items"
+            description="Only consider items added to Zotero within this many days. Leave blank for all time."
+          >
+            <input
+              min="0"
+              type="number"
+              placeholder="30"
+              defaultValue={settings.zoteroMonitorRecentDays?.toString() || ''}
+              onChange={(e) => {
+                const value = (e.target as HTMLInputElement).value;
+                updateSetting(
+                  'zoteroMonitorRecentDays',
+                  value === '' ? null : Number(value)
+                );
+              }}
+            />
+          </SettingItem>
+          <SettingItem
+            name="Libraries or groups"
+            description="Optional comma-separated Zotero library IDs or library/group names. Leave blank for all libraries."
+          >
+            <input
+              type="text"
+              spellCheck={false}
+              placeholder="1, My Group Library"
+              defaultValue={formatScopeInput(settings.zoteroMonitorLibraryScope)}
+              onChange={(e) =>
+                updateSetting(
+                  'zoteroMonitorLibraryScope',
+                  splitScopeInput((e.target as HTMLInputElement).value)
+                )
+              }
+            />
+          </SettingItem>
+          <SettingItem
+            name="Collection paths"
+            description="Optional comma-separated exact Zotero collection paths, such as Reading/Queue."
+          >
+            <input
+              type="text"
+              spellCheck={false}
+              placeholder="Reading/Queue"
+              defaultValue={formatScopeInput(
+                settings.zoteroMonitorCollectionScope
+              )}
+              onChange={(e) =>
+                updateSetting(
+                  'zoteroMonitorCollectionScope',
+                  splitScopeInput((e.target as HTMLInputElement).value)
+                )
+              }
+            />
+          </SettingItem>
+          <SettingItem
+            name="Tags"
+            description="Optional comma-separated exact Zotero tags. Leave blank for all tags."
+          >
+            <input
+              type="text"
+              spellCheck={false}
+              placeholder="to-read, paper"
+              defaultValue={formatScopeInput(settings.zoteroMonitorTagScope)}
+              onChange={(e) =>
+                updateSetting(
+                  'zoteroMonitorTagScope',
+                  splitScopeInput((e.target as HTMLInputElement).value)
+                )
+              }
+            />
+          </SettingItem>
+        </SettingsSection>
+      </SettingsSection>
+
+      <SettingsDivider />
+
+      <SettingsSection
+        title="Citation formats"
+        description="Commands that insert formatted citations or rendered citation templates."
+      >
+        <SettingItem>
+          <button onClick={addCite} className="mod-cta">
+            Add Citation Format
+          </button>
+        </SettingItem>
+        {citeFormatState.map((f, i) => {
+          return (
+            <CiteFormatSettings
+              key={i}
+              format={f}
+              index={i}
+              updateFormat={updateCite}
+              removeFormat={removeCite}
+            />
+          );
+        })}
+      </SettingsSection>
+
+      <SettingsDivider />
+
+      <SettingsSection
+        title="Import formats"
+        description="Templates and output paths used by Zotero import commands."
+      >
+        <SettingItem>
+          <button onClick={addExport} className="mod-cta">
+            Add Import Format
+          </button>
+        </SettingItem>
+        {exportFormatState.map((f, i) => {
+          return (
+            <ExportFormatSettings
+              key={exportFormatState.length - i}
+              format={f}
+              index={i}
+              updateFormat={updateExport}
+              removeFormat={removeExport}
+            />
+          );
+        })}
+      </SettingsSection>
+
+      <SettingsDivider />
+
+      <SettingsSection
+        title="Advanced image and OCR settings"
+        description="Rectangle annotations can be extracted from PDFs as images."
+        collapsible
+        defaultOpen={false}
+      >
+        <SettingItem name="Image Format">
+          <select
+            className="dropdown"
+            defaultValue={settings.pdfExportImageFormat}
+            onChange={(e) =>
+              updateSetting(
+                'pdfExportImageFormat',
+                (e.target as HTMLSelectElement).value
+              )
+            }
+          >
+            <option value="jpg">jpg</option>
+            <option value="png">png</option>
+          </select>
+        </SettingItem>
+        <SettingItem name="Image Quality (jpg only)">
+          <input
+            min="0"
+            max="100"
+            onChange={(e) =>
+              updateSetting(
+                'pdfExportImageQuality',
+                Number((e.target as HTMLInputElement).value)
+              )
+            }
+            type="number"
+            defaultValue={settings.pdfExportImageQuality.toString()}
+          />
+        </SettingItem>
+        <SettingItem name="Image DPI">
+          <input
+            min="0"
+            onChange={(e) =>
+              updateSetting(
+                'pdfExportImageDPI',
+                Number((e.target as HTMLInputElement).value)
+              )
+            }
+            type="number"
+            defaultValue={settings.pdfExportImageDPI.toString()}
+          />
+        </SettingItem>
+        <SettingItem
+          name="Image OCR"
+          description={
+            <div>
+              Attempt to extract text from images created by rectangle
+              annotations. This requires that{' '}
+              <a
+                href="https://tesseract-ocr.github.io/tessdoc/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                tesseract
+              </a>{' '}
+              be installed on your system.
+            </div>
           }
         >
-          <option value="jpg">jpg</option>
-          <option value="png">png</option>
-        </select>
-      </SettingItem>
-      <SettingItem name="Image Quality (jpg only)">
-        <input
-          min="0"
-          max="100"
-          onChange={(e) =>
-            updateSetting(
-              'pdfExportImageQuality',
-              Number((e.target as HTMLInputElement).value)
-            )
+          <div
+            onClick={() =>
+              setOCRState((s) => {
+                updateSetting('pdfExportImageOCR', !s);
+                return !s;
+              })
+            }
+            className={`checkbox-container${ocrState ? ' is-enabled' : ''}`}
+          />
+        </SettingItem>
+        <SettingItem
+          name="Tesseract path"
+          description={
+            <div>
+              Required: An absolute path to the tesseract executable. This can
+              be found on mac and linux with the terminal command{' '}
+              <pre>which tesseract</pre>
+            </div>
           }
-          type="number"
-          defaultValue={settings.pdfExportImageQuality.toString()}
-        />
-      </SettingItem>
-      <SettingItem name="Image DPI">
-        <input
-          min="0"
-          onChange={(e) =>
-            updateSetting(
-              'pdfExportImageDPI',
-              Number((e.target as HTMLInputElement).value)
-            )
-          }
-          type="number"
-          defaultValue={settings.pdfExportImageDPI.toString()}
-        />
-      </SettingItem>
-      <SettingItem
-        name="Image OCR"
-        description={
-          <div>
-            Attempt to extract text from images created by rectangle
-            annotations. This requires that{' '}
-            <a
-              href="https://tesseract-ocr.github.io/tessdoc/"
-              target="_blank"
-              rel="noreferrer"
-            >
-              tesseract
-            </a>{' '}
-            be installed on your system. Tesseract can be installed from
-            <a href="https://brew.sh/" target="_blank" rel="noreferrer">
-              homebrew on mac
-            </a>
-            , various linux package managers, and from{' '}
-            <a
-              href="https://github.com/UB-Mannheim/tesseract/wiki"
-              target="_blank"
-              rel="noreferrer"
-            >
-              here on windows
-            </a>
-            .
-          </div>
-        }
-      >
-        <div
-          onClick={() =>
-            setOCRState((s) => {
-              updateSetting('pdfExportImageOCR', !s);
-              return !s;
-            })
-          }
-          className={`checkbox-container${ocrState ? ' is-enabled' : ''}`}
-        />
-      </SettingItem>
-      <SettingItem
-        name="Tesseract path"
-        description={
-          <div>
-            Required: An absolute path to the tesseract executable. This can be
-            found on mac and linux with the terminal command{' '}
-            <pre>which tesseract</pre>
-          </div>
-        }
-      >
-        <input
-          ref={tessPathRef}
-          onChange={(e) =>
-            updateSetting(
-              'pdfExportImageTesseractPath',
-              (e.target as HTMLInputElement).value
-            )
-          }
-          type="text"
-          defaultValue={settings.pdfExportImageTesseractPath}
-        />
-        <div
-          className="clickable-icon setting-editor-extra-setting-button"
-          aria-label="Attempt to find tesseract automatically"
-          onClick={async () => {
-            try {
-              const pathToTesseract = await which('tesseract');
-              if (pathToTesseract) {
-                tessPathRef.current.value = pathToTesseract;
-                updateSetting('pdfExportImageTesseractPath', pathToTesseract);
-              } else {
+        >
+          <input
+            ref={tessPathRef}
+            onChange={(e) =>
+              updateSetting(
+                'pdfExportImageTesseractPath',
+                (e.target as HTMLInputElement).value
+              )
+            }
+            type="text"
+            defaultValue={settings.pdfExportImageTesseractPath}
+          />
+          <div
+            className="clickable-icon setting-editor-extra-setting-button"
+            aria-label="Attempt to find tesseract automatically"
+            onClick={async () => {
+              try {
+                const pathToTesseract = await which('tesseract');
+                if (pathToTesseract) {
+                  tessPathRef.current.value = pathToTesseract;
+                  updateSetting('pdfExportImageTesseractPath', pathToTesseract);
+                } else {
+                  new Notice(
+                    'Unable to find tesseract on your system. If it is installed, please manually enter a path.'
+                  );
+                }
+              } catch (e) {
                 new Notice(
                   'Unable to find tesseract on your system. If it is installed, please manually enter a path.'
                 );
+                console.error(e);
               }
-            } catch (e) {
-              new Notice(
-                'Unable to find tesseract on your system. If it is installed, please manually enter a path.'
-              );
-              console.error(e);
-            }
-          }}
-        >
-          <Icon name="magnifying-glass" />
-        </div>
-      </SettingItem>
-      <SettingItem
-        name="Image OCR Language"
-        description={
-          <div>
-            Optional: defaults to english. Multiple languages can be specified
-            like so: <pre>eng+deu</pre>. Each language must be installed on your
-            system.{' '}
-            <a
-              href="https://github.com/tesseract-ocr/tessdata"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Languages can be downloaded here
-            </a>
-            . (See{' '}
-            <a
-              href="https://tesseract-ocr.github.io/tessdoc/Data-Files-in-different-versions.html"
-              target="_blank"
-              rel="noreferrer"
-            >
-              here for a description of the language codes
-            </a>
-            )
+            }}
+          >
+            <Icon name="magnifying-glass" />
           </div>
-        }
-      >
-        <input
-          onChange={(e) =>
-            updateSetting(
-              'pdfExportImageOCRLang',
-              (e.target as HTMLInputElement).value
-            )
+        </SettingItem>
+        <SettingItem
+          name="Image OCR Language"
+          description={
+            <div>
+              Optional: defaults to english. Multiple languages can be specified
+              like so: <pre>eng+deu</pre>.
+            </div>
           }
-          type="text"
-          defaultValue={settings.pdfExportImageOCRLang}
-        />
-      </SettingItem>
-      <SettingItem
-        name="Tesseract data directory"
-        description="Optional: supply an absolute path to the directory where tesseract's language files reside. This folder should include *.traineddata files for your selected languages."
-      >
-        <input
-          ref={tessDataPathRef}
-          onChange={(e) =>
-            updateSetting(
-              'pdfExportImageTessDataDir',
-              (e.target as HTMLInputElement).value
-            )
-          }
-          type="text"
-          defaultValue={settings.pdfExportImageTessDataDir}
-        />
-        <div
-          className="clickable-icon setting-editor-extra-setting-button"
-          aria-label="Select the tesseract data directory"
-          onClick={() => {
-            const path = require('electron').remote.dialog.showOpenDialogSync({
-              properties: ['openDirectory'],
-            });
-
-            if (path && path.length) {
-              tessDataPathRef.current.value = path[0];
-              updateSetting('pdfExportImageTessDataDir', path[0]);
-            }
-          }}
         >
-          <Icon name="lucide-folder-open" />
-        </div>
-      </SettingItem>
+          <input
+            onChange={(e) =>
+              updateSetting(
+                'pdfExportImageOCRLang',
+                (e.target as HTMLInputElement).value
+              )
+            }
+            type="text"
+            defaultValue={settings.pdfExportImageOCRLang}
+          />
+        </SettingItem>
+        <SettingItem
+          name="Tesseract data directory"
+          description="Optional: supply an absolute path to the directory where tesseract's language files reside. This folder should include *.traineddata files for your selected languages."
+        >
+          <input
+            ref={tessDataPathRef}
+            onChange={(e) =>
+              updateSetting(
+                'pdfExportImageTessDataDir',
+                (e.target as HTMLInputElement).value
+              )
+            }
+            type="text"
+            defaultValue={settings.pdfExportImageTessDataDir}
+          />
+          <div
+            className="clickable-icon setting-editor-extra-setting-button"
+            aria-label="Select the tesseract data directory"
+            onClick={() => {
+              const path = require('electron').remote.dialog.showOpenDialogSync({
+                properties: ['openDirectory'],
+              });
+
+              if (path && path.length) {
+                tessDataPathRef.current.value = path[0];
+                updateSetting('pdfExportImageTessDataDir', path[0]);
+              }
+            }}
+          >
+            <Icon name="lucide-folder-open" />
+          </div>
+        </SettingItem>
+      </SettingsSection>
     </div>
   );
 }
@@ -804,6 +922,7 @@ export class ZoteroConnectorSettingsTab extends PluginSettingTab {
   display() {
     ReactDOM.render(
       <SettingsComponent
+        app={this.app}
         settings={this.plugin.settings}
         addCiteFormat={this.addCiteFormat}
         updateCiteFormat={this.updateCiteFormat}

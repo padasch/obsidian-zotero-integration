@@ -18,7 +18,10 @@ import {
   internalVersion,
 } from './settings/AssetDownloader';
 import { ZoteroMonitor } from './ZoteroMonitor';
-import { DEFAULT_ZOTERO_MONITOR_TABLE_COLUMNS } from './ZoteroMonitor.columns';
+import {
+  DEFAULT_ZOTERO_ITEM_TABLE_COLUMNS,
+  normalizeZoteroItemTableColumns,
+} from './ZoteroItemTable.columns';
 import { ZoteroConnectorSettingsTab } from './settings/settings';
 import {
   CitationFormat,
@@ -52,7 +55,7 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   zoteroMonitorCollectionScope: [],
   zoteroMonitorTagScope: [],
   zoteroMonitorImportFormat: '',
-  zoteroMonitorTableColumns: DEFAULT_ZOTERO_MONITOR_TABLE_COLUMNS.slice(),
+  zoteroItemTableColumns: DEFAULT_ZOTERO_ITEM_TABLE_COLUMNS.slice(),
 };
 
 async function fixPath() {
@@ -319,12 +322,19 @@ export default class ZoteroConnector extends Plugin {
   }
 
   async loadSettings() {
-    const loadedSettings = await this.loadData();
-
-    this.settings = {
+    const loadedSettings = (await this.loadData()) || {};
+    const mergedSettings = {
       ...DEFAULT_SETTINGS,
       ...loadedSettings,
     };
+
+    mergedSettings.zoteroItemTableColumns = normalizeZoteroItemTableColumns(
+      mergedSettings.zoteroItemTableColumns ||
+        mergedSettings.zoteroMonitorTableColumns
+    );
+    delete mergedSettings.zoteroMonitorTableColumns;
+
+    this.settings = mergedSettings;
   }
 
   async saveSettings() {

@@ -4,15 +4,19 @@ import type ZoteroConnector from './main';
 import {
   CiteKeyExport,
   DatabaseWithPort,
+  ZoteroItemTableColumn,
   ZoteroManagedUserProperties,
   ZoteroMonitorItem,
   ZoteroMonitorScope,
-  ZoteroMonitorTableColumn,
 } from './types';
 import {
-  normalizeMonitorTableColumns,
-  ZOTERO_MONITOR_TABLE_COLUMN_BY_KEY,
-} from './ZoteroMonitor.columns';
+  getZoteroItemTableCellText,
+  getZoteroItemTableChipValues,
+  getZoteroItemTableSortValue,
+  isZoteroItemTableChipColumn,
+  normalizeZoteroItemTableColumns,
+  ZOTERO_ITEM_TABLE_COLUMN_BY_KEY,
+} from './ZoteroItemTable.columns';
 import {
   filterItemsByRecentDays,
   filterItemsByScope,
@@ -37,7 +41,7 @@ const MONITOR_PRELOAD_DELAY_MS = 1500;
 type MonitorQuickSelect = 'none' | 'today' | 'all';
 type MonitorSelectionMode = MonitorQuickSelect | 'custom';
 type MonitorSortDirection = 'asc' | 'desc';
-type MonitorSortKey = ZoteroMonitorTableColumn;
+type MonitorSortKey = ZoteroItemTableColumn;
 type MonitorItemCache = {
   databaseKey: string;
   fetchedAt: number;
@@ -59,15 +63,6 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 function itemIdentity(item: ZoteroMonitorItem): string {
   return `${item.libraryID}:${item.citekey}`;
-}
-
-function getDisplayDate(value?: string): string {
-  if (!value) return '';
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-
-  return parsed.toISOString().slice(0, 10);
 }
 
 function getSearchText(item: ZoteroMonitorItem): string {
@@ -166,7 +161,7 @@ class ZoteroMissingItemsModal extends Modal {
   private searchTerm = '';
   private sortKey: MonitorSortKey = 'dateAdded';
   private sortDirection: MonitorSortDirection = 'desc';
-  private tableColumns: ZoteroMonitorTableColumn[];
+  private tableColumns: ZoteroItemTableColumn[];
   private managedProperties: ZoteroManagedUserProperties = {
     zoteroProject: [],
     zoteroTopic: [],
@@ -187,7 +182,7 @@ class ZoteroMissingItemsModal extends Modal {
   constructor(
     app: App,
     private items: ZoteroMonitorItem[],
-    tableColumns: ZoteroMonitorTableColumn[],
+    tableColumns: string[],
     private filterSummary: string[],
     private onImport: (
       items: ZoteroMonitorItem[],
@@ -196,16 +191,13 @@ class ZoteroMissingItemsModal extends Modal {
     private onFinished: () => void
   ) {
     super(app);
-    this.tableColumns = normalizeMonitorTableColumns(tableColumns);
+    this.tableColumns = normalizeZoteroItemTableColumns(tableColumns);
 
     if (!this.tableColumns.includes(this.sortKey)) {
       this.sortKey = this.tableColumns.includes('dateAdded')
         ? 'dateAdded'
         : this.tableColumns[0];
-      this.sortDirection =
-        this.sortKey === 'dateAdded' || this.sortKey === 'dateModified'
-          ? 'desc'
-          : 'asc';
+      this.sortDirection = this.getDefaultSortDirection(this.sortKey);
     }
 
     for (const item of items) {
@@ -496,32 +488,17 @@ class ZoteroMissingItemsModal extends Modal {
     return Array.from(topics).sort((a, b) => a.localeCompare(b));
   }
 
-  private getSortValue(item: ZoteroMonitorItem): string | number {
-    switch (this.sortKey) {
-      case 'title':
-        return item.title || item.citekey;
-      case 'citekey':
-        return item.citekey;
-      case 'library':
-        return item.libraryName || `Library ${item.libraryID}`;
-      case 'dateModified':
-        return this.getDateSortValue(item.dateModified || item.dateAdded);
-      case 'dateAdded':
-        return this.getDateSortValue(item.dateAdded);
-      case 'tags':
-        return getItemTags(item.item).join(' ');
-      case 'collections':
-        return getItemCollectionPaths(item.item).join(' ');
-      default:
-        return '';
-    }
+  private getDefaultSortDirection(key: MonitorSortKey): MonitorSortDirection {
+    return key === 'dateAdded' ||
+      key === 'dateModified' ||
+      key === 'date' ||
+      key === 'year'
+      ? 'desc'
+      : 'asc';
   }
 
-  private getDateSortValue(value?: string): number {
-    if (!value) return 0;
-
-    const parsed = new Date(value).getTime();
-    return Number.isNaN(parsed) ? 0 : parsed;
+  private getSortValue(item: ZoteroMonitorItem): string | number {
+    return getZoteroItemTableSortValue(item, this.sortKey);
   }
 
   private compareItems(a: ZoteroMonitorItem, b: ZoteroMonitorItem): number {
@@ -547,8 +524,7 @@ class ZoteroMissingItemsModal extends Modal {
       this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
       this.sortKey = key;
-      this.sortDirection =
-        key === 'dateAdded' || key === 'dateModified' ? 'desc' : 'asc';
+      this.sortDirection = this.getDefaultSortDirection(key);
     }
 
     this.renderList();
@@ -664,9 +640,9 @@ class ZoteroMissingItemsModal extends Modal {
 
   private renderColumnHeader(
     header: HTMLTableRowElement,
-    columnKey: ZoteroMonitorTableColumn
+    columnKey: ZoteroItemTableColumn
   ) {
-    const column = ZOTERO_MONITOR_TABLE_COLUMN_BY_KEY[columnKey];
+    const column = ZOTERO_ITEM_TABLE_COLUMN_BY_KEY[columnKey];
     const cell = header.createEl('th', { cls: column.className });
     const button = cell.createEl('button', {
       cls: 'zt-monitor-sort-button',
@@ -743,53 +719,28 @@ class ZoteroMissingItemsModal extends Modal {
   private renderItemCell(
     row: HTMLTableRowElement,
     item: ZoteroMonitorItem,
-    columnKey: ZoteroMonitorTableColumn
+    columnKey: ZoteroItemTableColumn
   ) {
-    const column = ZOTERO_MONITOR_TABLE_COLUMN_BY_KEY[columnKey];
+    const column = ZOTERO_ITEM_TABLE_COLUMN_BY_KEY[columnKey];
 
-    switch (column.key) {
-      case 'title':
-        this.renderTitleCell(row, item, column.className);
-        return;
-      case 'citekey':
-        row.createEl('td', {
-          cls: column.className,
-          text: item.citekey,
-        });
-        return;
-      case 'library':
-        row.createEl('td', {
-          cls: column.className,
-          text: item.libraryName || `Library ${item.libraryID}`,
-        });
-        return;
-      case 'dateModified':
-        row.createEl('td', {
-          cls: column.className,
-          text: getDisplayDate(item.dateModified || item.dateAdded),
-        });
-        return;
-      case 'dateAdded':
-        row.createEl('td', {
-          cls: column.className,
-          text: getDisplayDate(item.dateAdded),
-        });
-        return;
-      case 'tags':
-        this.renderChipCell(
-          row,
-          column.className,
-          getItemTags(item.item).map((tag) => `#${tag}`)
-        );
-        return;
-      case 'collections':
-        this.renderChipCell(
-          row,
-          column.className,
-          getItemCollectionPaths(item.item)
-        );
-        return;
+    if (column.key === 'title') {
+      this.renderTitleCell(row, item, column.className);
+      return;
     }
+
+    if (isZoteroItemTableChipColumn(column.key)) {
+      this.renderChipCell(
+        row,
+        column.className,
+        getZoteroItemTableChipValues(item, column.key)
+      );
+      return;
+    }
+
+    row.createEl('td', {
+      cls: column.className,
+      text: getZoteroItemTableCellText(item, column.key),
+    });
   }
 
   private renderList() {
@@ -1067,7 +1018,9 @@ export class ZoteroMonitor {
       new ZoteroMissingItemsModal(
         this.plugin.app,
         missing,
-        this.plugin.settings.zoteroMonitorTableColumns || [],
+        this.plugin.settings.zoteroItemTableColumns ||
+          this.plugin.settings.zoteroMonitorTableColumns ||
+          [],
         this.getFilterSummary(),
         (items, properties) => this.importItems(items, properties),
         () => {
