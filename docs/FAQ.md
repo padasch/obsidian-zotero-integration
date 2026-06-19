@@ -7,7 +7,7 @@ There can be multiple reasons for imports to fail.
 - Please verify that your Bibliography Style is set and available in Zotero, too.
 - Check the [Obsidian Error Console](https://forum.obsidian.md/t/how-to-access-the-console/16703).
 - Double-check your template for typos.
-- Use the plugin's Data Explorer and inspect the raw data from Zotero; this is what templates use.
+- Use the `Test import template` command and inspect the raw data from Zotero; this is what templates use.
 - Also check the FAQ entry "My import doesn't see any annotations."
 - Report plugin issues here: https://github.com/padasch/obsidian-zotero-integration/issues
 
@@ -25,12 +25,12 @@ No. Ensure the style is installed in Zotero and visible in Zotero's citation sty
 ## Do I need to extract annotations in Zotero into its own note?
 Short answer is no.
 
-In the past you had to extract annotations in Zotero into its own note. This is no longer required. When using templating, you can extract the annotation directly from Zotero. But this requires setting up a good template that works for you.
+In the past you had to extract annotations in Zotero into its own note. This is no longer required. The built-in Literature Note template can import annotations directly from Zotero, and a custom template can be added later if you want a different note shape.
 
 ### But it might be easier to extract annotations first
-The easiest way is to extract annotations in Zotero first and then use the "Insert notes into current document". Example import:
+The easiest way is to extract annotations in Zotero first and then import or update the item with `Import/update via Zotero picker`. Example import:
 
-Importing via "Insert notes into your current document" will lose color information, images, and some blocks. This might not be ideal, but you no longer need to set up your own import template.
+Importing Zotero-generated note text can lose color information, images, and some blocks. This might not be ideal, but you no longer need to set up your own import template for normal literature-note imports.
 
 
 ## My import doesn't see any annotations / doesn't import any images

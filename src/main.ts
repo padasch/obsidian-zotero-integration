@@ -6,11 +6,6 @@ import { DataExplorerView, viewType } from './DataExplorerView';
 import { LoadingModal } from './bbt/LoadingModal';
 import { getCAYW } from './bbt/cayw';
 import { exportToMarkdown, renderCiteTemplate } from './bbt/export';
-import {
-  filesFromNotes,
-  insertNotesIntoCurrentDoc,
-  noteExportPrompt,
-} from './bbt/exportNotes';
 import './bbt/template.helpers';
 import {
   currentVersion,
@@ -33,6 +28,50 @@ import {
 const commandPrefix = 'obsidian-zotero-desktop-connector:';
 const citationCommandIDPrefix = 'zdc-';
 const exportCommandIDPrefix = 'zdc-exp-';
+const DEFAULT_CSL_STYLE = 'harvard-cite-them-right';
+const DEFAULT_IMAGE_OUTPUT_PATH = 'images/';
+const DEFAULT_IMAGE_BASE_NAME = '@{{citekey}}-image';
+const DEFAULT_EXPORT_FORMATS: ExportFormat[] = [
+  {
+    name: 'Literature Note',
+    outputPathTemplate: '@{{citekey}}.md',
+    imageOutputPathTemplate: DEFAULT_IMAGE_OUTPUT_PATH,
+    imageBaseNameTemplate: DEFAULT_IMAGE_BASE_NAME,
+    cslStyle: DEFAULT_CSL_STYLE,
+  },
+];
+
+function cloneDefaultExportFormats(): ExportFormat[] {
+  return DEFAULT_EXPORT_FORMATS.map((format) => ({ ...format }));
+}
+
+function normalizeExportFormats(formats: ExportFormat[]): ExportFormat[] {
+  return formats.map((format) => {
+    const normalized = { ...format };
+
+    if (normalized.outputPathTemplate?.trim() === '{{citekey}}.md') {
+      normalized.outputPathTemplate = '@{{citekey}}.md';
+    }
+
+    if (
+      ['{{citekey}}/', 'images/{{citekey}}/'].includes(
+        normalized.imageOutputPathTemplate?.trim()
+      )
+    ) {
+      normalized.imageOutputPathTemplate = DEFAULT_IMAGE_OUTPUT_PATH;
+    }
+
+    if (
+      !normalized.imageBaseNameTemplate ||
+      normalized.imageBaseNameTemplate.trim() === 'image'
+    ) {
+      normalized.imageBaseNameTemplate = DEFAULT_IMAGE_BASE_NAME;
+    }
+
+    return normalized;
+  });
+}
+
 const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   database: 'Zotero',
   noteImportFolder: '',
@@ -40,7 +79,7 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   pdfExportImageFormat: 'jpg',
   pdfExportImageQuality: 90,
   citeFormats: [],
-  exportFormats: [],
+  exportFormats: cloneDefaultExportFormats(),
   citeSuggestTemplate: '[[{{citekey}}]]',
   openNoteAfterImport: false,
   whichNotesToOpenAfterImport: 'first-imported-note',
@@ -84,6 +123,13 @@ async function fixPath() {
   }
 }
 
+function isLegacyDefaultCitationCommand(format: CitationFormat): boolean {
+  return (
+    (format.name === 'Citation' && format.format === 'formatted-citation') ||
+    (format.name === 'Bibliography' && format.format === 'formatted-bibliography')
+  );
+}
+
 export default class ZoteroConnector extends Plugin {
   settings: ZoteroConnectorSettings;
   emitter: Events;
@@ -105,44 +151,6 @@ export default class ZoteroConnector extends Plugin {
 
     this.settings.exportFormats.forEach((f) => {
       this.addExportCommand(f);
-    });
-
-    this.addCommand({
-      id: 'zdc-insert-notes',
-      name: 'Insert notes into current document',
-      editorCallback: (editor) => {
-        const database = {
-          database: this.settings.database,
-          port: this.settings.port,
-        };
-        noteExportPrompt(
-          database,
-          this.app.workspace.getActiveFile()?.parent.path
-        ).then((notes) => {
-          if (notes) {
-            insertNotesIntoCurrentDoc(editor, notes);
-          }
-        });
-      },
-    });
-
-    this.addCommand({
-      id: 'zdc-import-notes',
-      name: 'Import notes',
-      callback: () => {
-        const database = {
-          database: this.settings.database,
-          port: this.settings.port,
-        };
-        noteExportPrompt(database, this.settings.noteImportFolder)
-          .then((notes) => {
-            if (notes) {
-              return filesFromNotes(this.settings.noteImportFolder, notes);
-            }
-            return [] as string[];
-          })
-          .then((notes) => this.openNotes(notes));
-      },
     });
 
     this.addCommand({
@@ -232,6 +240,8 @@ export default class ZoteroConnector extends Plugin {
   }
 
   addFormatCommand(format: CitationFormat) {
+    if (isLegacyDefaultCitationCommand(format)) return;
+
     this.addCommand({
       id: `${citationCommandIDPrefix}${format.name}`,
       name: format.name,
@@ -367,6 +377,13 @@ export default class ZoteroConnector extends Plugin {
       ...DEFAULT_SETTINGS,
       ...loadedSettings,
     };
+    const loadedExportFormats = Array.isArray(loadedSettings.exportFormats)
+      ? loadedSettings.exportFormats
+      : [];
+
+    mergedSettings.exportFormats = loadedExportFormats.length
+      ? normalizeExportFormats(loadedExportFormats)
+      : cloneDefaultExportFormats();
 
     mergedSettings.zoteroItemTableColumns = normalizeZoteroItemTableColumns(
       mergedSettings.zoteroItemTableColumns ||

@@ -6,6 +6,8 @@ import {
   PersistExtension,
   filterBy,
   format,
+  markdownLinkLabel,
+  nl2br,
   renderTemplate,
 } from '../template.env';
 
@@ -59,6 +61,11 @@ describe('filter#filterBy', () => {
   it('filters by string that ends with string', () => {
     expect(filterBy(tests, 'a.b', 'endswith', 'yz')).toHaveLength(1);
     expect(filterBy(tests, 'a.b', 'endswith', 'yz')[0]).toBe(tests[2]);
+  });
+
+  it('filters by existing values', () => {
+    expect(filterBy(tests, 'b', 'exists')).toEqual([tests[0]]);
+    expect(filterBy(['', 'abc'], '', 'exists')).toEqual(['abc']);
   });
 
   it('returns empty array when date is not date', () => {
@@ -166,6 +173,26 @@ describe('filter#format()', () => {
     expect(format('hi', 'YYYY-MM-DD')).toBe(
       'Error: `format` can only be applied to dates. Tried for format string'
     );
+  });
+});
+
+describe('filter#markdownLinkLabel()', () => {
+  it('uses the markdown link target with a new label', () => {
+    expect(markdownLinkLabel('[Old label](zotero://select/item)', 'Open')).toBe(
+      '[Open](zotero://select/item)'
+    );
+  });
+
+  it('wraps a plain target as a markdown link', () => {
+    expect(markdownLinkLabel('https://example.com', 'Open')).toBe(
+      '[Open](https://example.com)'
+    );
+  });
+});
+
+describe('filter#nl2br()', () => {
+  it('turns line breaks into markdown-safe HTML breaks', () => {
+    expect(nl2br('one\ntwo\r\nthree')).toBe('one<br>two<br>three');
   });
 });
 

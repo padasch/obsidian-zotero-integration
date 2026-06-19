@@ -617,6 +617,55 @@ function getItemPathOverride(
   return pathOverrides[key] || null;
 }
 
+function trimVaultRelativePath(value: string) {
+  return String(value || '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+}
+
+export function applyNoteImportFolder(
+  markdownPath: string,
+  noteImportFolder?: string
+): string {
+  const cleanedPath = String(markdownPath || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '');
+  const cleanedFolder = trimVaultRelativePath(noteImportFolder || '');
+
+  if (!cleanedFolder || cleanedPath.includes('/')) {
+    return cleanedPath;
+  }
+
+  return `${cleanedFolder}/${cleanedPath}`;
+}
+
+export function resolveImageRelativePathForNote(
+  imageRelativePath: string,
+  markdownPath: string
+): string {
+  const cleanedImagePath = trimVaultRelativePath(imageRelativePath);
+  if (!cleanedImagePath) return '';
+
+  const noteDir = trimVaultRelativePath(
+    path.posix.dirname(String(markdownPath || '').replace(/\\/g, '/'))
+  ).replace(/^\.\/?$/, '');
+  const normalizedImagePath =
+    cleanedImagePath === 'images' || cleanedImagePath.includes('/')
+      ? cleanedImagePath
+      : `images/${cleanedImagePath}`;
+
+  if (
+    !noteDir ||
+    normalizedImagePath === noteDir ||
+    normalizedImagePath.startsWith(`${noteDir}/`)
+  ) {
+    return normalizedImagePath;
+  }
+
+  return `${noteDir}/${normalizedImagePath}`;
+}
+
 function withManagedProperties(
   templateData: any,
   managedProperties?: ZoteroManagedUserProperties
@@ -636,6 +685,21 @@ function withManagedProperties(
   };
 }
 
+function isEmptyFrontmatterValue(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    value === '' ||
+    (Array.isArray(value) && value.length === 0)
+  );
+}
+
+function cloneFrontmatterValue<T>(value: T): T {
+  if (Array.isArray(value)) return value.slice() as T;
+  if (value && typeof value === 'object') return { ...value };
+  return value;
+}
+
 async function writeManagedProperties(
   file: TFile,
   managedProperties?: ZoteroManagedUserProperties
@@ -650,6 +714,30 @@ async function writeManagedProperties(
 
     if (managedProperties.zoteroSummary !== undefined) {
       frontmatter.zoteroSummary = managedProperties.zoteroSummary;
+    }
+  });
+}
+
+async function writePreservedProperties(
+  file: TFile,
+  existingFrontmatter: Record<string, any> | null,
+  settings: ZoteroConnectorSettings
+) {
+  if (!existingFrontmatter || !settings.zoteroPreservedProperties?.length) {
+    return;
+  }
+
+  await app.fileManager.processFrontMatter(file, (frontmatter) => {
+    for (const property of settings.zoteroPreservedProperties) {
+      if (!property) continue;
+      if (!Object.prototype.hasOwnProperty.call(existingFrontmatter, property)) {
+        continue;
+      }
+
+      const existingValue = existingFrontmatter[property];
+      if (isEmptyFrontmatterValue(existingValue)) continue;
+
+      frontmatter[property] = cloneFrontmatterValue(existingValue);
     }
   });
 }
@@ -693,6 +781,7 @@ export async function exportToMarkdown(
       item: any;
       file: TFile;
       fileContent: string;
+      frontmatter: Record<string, any> | null;
       lastImportDate: moment.Moment;
       existingAnnotations: string;
     }
@@ -709,6 +798,10 @@ export async function exportToMarkdown(
       const existingAnnotations = existingMarkdownFile
         ? getExistingAnnotations(existingMarkdown)
         : '';
+      const existingFrontmatter = existingMarkdownFile
+        ? ((app.metadataCache.getFileCache(existingMarkdownFile)?.frontmatter ||
+            null) as Record<string, any> | null)
+        : null;
       const lastImportDate = existingMarkdownFile
         ? getLastExport(existingMarkdown)
         : moment(0);
@@ -717,6 +810,7 @@ export async function exportToMarkdown(
         item,
         file: existingMarkdownFile,
         fileContent: existingMarkdown,
+        frontmatter: existingFrontmatter,
         lastImportDate,
         existingAnnotations,
       });
@@ -730,14 +824,17 @@ export async function exportToMarkdown(
     }
 
     return normalizePath(
-      sanitizeFilePath(
-        removeStartingSlash(
-          await renderTemplate(
-            sourcePath,
-            exportFormat.outputPathTemplate,
-            pathTemplateData
+      applyNoteImportFolder(
+        sanitizeFilePath(
+          removeStartingSlash(
+            await renderTemplate(
+              sourcePath,
+              exportFormat.outputPathTemplate,
+              pathTemplateData
+            )
           )
-        )
+        ),
+        settings.noteImportFolder
       )
     );
   };
@@ -769,7 +866,9 @@ export async function exportToMarkdown(
         ...item,
       });
 
-      const imageRelativePath = exportFormat.imageOutputPathTemplate
+      const markdownPath = await getMarkdownPath(pathTemplateData);
+
+      const rawImageRelativePath = exportFormat.imageOutputPathTemplate
         ? normalizePath(
             sanitizeFilePath(
               removeStartingSlash(
@@ -782,6 +881,10 @@ export async function exportToMarkdown(
             )
           )
         : '';
+      const imageRelativePath = resolveImageRelativePathForNote(
+        rawImageRelativePath,
+        markdownPath
+      );
 
       const imageOutputPath = path.resolve(vaultRoot, imageRelativePath);
 
@@ -796,8 +899,6 @@ export async function exportToMarkdown(
             )
           )
         : 'image';
-
-      const markdownPath = await getMarkdownPath(pathTemplateData);
 
       let annots: any[] = [];
 
@@ -881,6 +982,7 @@ export async function exportToMarkdown(
         if (params.forceOverwrite) {
           await app.vault.modify(file, rendered);
           await writeManagedProperties(file, params.managedProperties);
+          await writePreservedProperties(file, data.frontmatter, settings);
           await params.afterWrite?.(file, item, markdownPath);
           createdOrUpdatedMarkdownFiles.push(markdownPath);
         } else {
@@ -897,6 +999,7 @@ export async function exportToMarkdown(
           if (shouldOverwrite) {
             await app.vault.modify(file, rendered);
             await writeManagedProperties(file, params.managedProperties);
+            await writePreservedProperties(file, data.frontmatter, settings);
             await params.afterWrite?.(file, item, markdownPath);
             createdOrUpdatedMarkdownFiles.push(markdownPath);
           }

@@ -12,7 +12,7 @@ Previously, this plugin used three different template files. For the sake of thi
 
 ## What data is available to templates?
 
-You can view the data available to templates using the `Data Explorer` command in Obsidian's command palette.
+You can view the data available to templates using the `Test import template` command in Obsidian's command palette.
 
 
 ## What templating language do I use?
@@ -53,7 +53,7 @@ Please see the [Nunjucks docs](https://mozilla.github.io/nunjucks/templating.htm
 
 ## Where do I store my templates?
 
-Templates can reside anywhere in your Obsidian vault. The path to the template is supplied in the import settings.
+Templates can reside anywhere in your Obsidian vault. The path to the template is supplied in the import settings. The template path is optional; when it is blank, imports use the built-in minimal Literature Note template.
 
 
 

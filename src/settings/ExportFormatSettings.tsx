@@ -113,9 +113,10 @@ export function ExportFormatSettings({
           />
         </div>
         <div className="zt-format__input-note">
-          The file path of the exported markdown. Supports templating, eg{' '}
-          <pre>My Folder/{'{{citekey}}'}.md</pre>. Templates have access to data
-          from the Zotero item and its first attachment.
+          The path for new markdown files. Supports templating, eg{' '}
+          <pre>My Folder/@{'{{citekey}}'}.md</pre>. If this is only a file
+          name, Note Import Location is prepended. Updates of existing notes keep
+          the current note path.
         </div>
       </div>
 
@@ -130,9 +131,10 @@ export function ExportFormatSettings({
           />
         </div>
         <div className="zt-format__input-note">
-          The folder in which images should be saved. Supports templating, eg{' '}
-          <pre>Assets/{'{{citekey}}'}/</pre>. Templates have access to data from
-          the Zotero item and its first attachment.
+          Folder for exported annotation images. Relative paths are resolved from
+          the final note folder. Use <pre>images/</pre> for a shared images
+          folder beside the note; single folder names are placed below{' '}
+          <pre>images/</pre>.
         </div>
       </div>
 
@@ -147,12 +149,10 @@ export function ExportFormatSettings({
           />
         </div>
         <div className="zt-format__input-note">
-          The base file name of exported images. Eg. <pre>image</pre> will
-          result in <pre>image-1-x123-y456.jpg</pre> where <pre>1</pre> is the
-          page number and <pre>x123</pre> and <pre>y456</pre> are the x and y
-          coordinates of rectangle annotation on the page. Supports templating.
-          Templates have access to data from the Zotero item and its first
-          attachment.
+          The base file name of exported images. Eg.{' '}
+          <pre>@{'{{citekey}}'}-image</pre> results in{' '}
+          <pre>@smith2024-image-1-x123-y456.jpg</pre>, where the suffix records
+          page and rectangle coordinates. Supports templating.
         </div>
       </div>
 
@@ -175,8 +175,11 @@ export function ExportFormatSettings({
           </button>
         </div>
         <div className="zt-format__input-note">
-          Open the data explorer from the command palette to see available
-          template data. Templates are written using{' '}
+          Optional. Leave blank to use the built-in minimal Literature Note
+          template. Choose a markdown file only if you want to fully control the
+          generated note body. Custom templates can use <pre>{'{% persist %}'}</pre>{' '}
+          blocks for sections that should survive updates. Use the Test import
+          template command to inspect available data. Templates are written using{' '}
           <a
             href="https://mozilla.github.io/nunjucks/templating.html#variables"
             target="_blank"

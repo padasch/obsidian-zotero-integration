@@ -12,9 +12,9 @@ Before installing/updating this plugin in your vault, make a backup of:
 - plugin settings (`.obsidian/plugins/obsidian-zotero-integration*`)
 - any templates or import formats you rely on
 
-## Latest release
+## Current version
 
-Current plugin release: **3.2.14**.
+Current plugin version: **3.2.16**.
 
 ## Install
 
@@ -35,7 +35,7 @@ Current plugin release: **3.2.14**.
 
 - Import citations, bibliographies, notes, and PDF annotations from Zotero (and Juris-M)
 - Run imports from commands or ribbons
-- Import notes from a configurable folder
+- Import or update literature notes with a built-in default template or a custom template
 - Quick monitor that detects newly added Zotero references in Obsidian
 
 ## Key fork updates
@@ -53,6 +53,7 @@ Current plugin release: **3.2.14**.
 - **Multi-step missing-reference imports** in the review modal:
   - `Import & close`
   - `Import & continue`
+- **Built-in Literature Note template** so a template file is optional for normal imports.
 - **Faster missing-reference review** through background Zotero metadata caching.
 - **Online paper links** in the missing-reference table, using DOI/publisher URL or a Scholar search fallback.
 - **Configurable Zotero item table columns** with text-field ordering, column validation, and separate tags / leaf collection path columns.
@@ -76,7 +77,7 @@ You can control how many recent days it considers (`Recent Zotero items`), scope
 
 The **Zotero item table columns** setting controls item tables used by Zotero import/review workflows. Enter one column key per line; the order of the lines controls the order of the table. Supported columns include `title`, `citekey`, `creators`, `year`, `date`, `publication`, `publisher`, `itemType`, `dateAdded`, `tags`, `collections`, `doi`, and `url`.
 
-The **Preserved properties** setting also uses one property per line. Both settings show warnings for entries the plugin cannot match.
+The **Preserved properties** setting also uses one property per line. During updates or re-imports, matching values from the existing note are copied back after the note is rendered. Both settings show warnings for entries the plugin cannot match.
 
 ### Default-style folder/file/style entry fields
 
@@ -87,7 +88,7 @@ The following fields are now plain input fields with Obsidian fuzzy picker butto
 - `Citation Style`
 - `Bibliography Style`
 
-This avoids non-standard select behavior while keeping manual path entry available.
+This avoids non-standard select behavior while keeping manual path entry available. `Template File` can be left blank to use the built-in Literature Note template. `Note Import Location` is only prepended when an import format output path is just a file name; output paths with folders are used as written.
 
 ## Documentation
 

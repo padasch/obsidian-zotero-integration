@@ -233,9 +233,9 @@ function SettingsComponent({
     setExportFormatState(
       addExportFormat({
         name: `Import #${exportFormatState.length + 1}`,
-        outputPathTemplate: '{{citekey}}.md',
-        imageOutputPathTemplate: '{{citekey}}/',
-        imageBaseNameTemplate: 'image',
+        outputPathTemplate: '@{{citekey}}.md',
+        imageOutputPathTemplate: 'images/',
+        imageBaseNameTemplate: '@{{citekey}}-image',
       })
     );
   }, [addExportFormat, citeFormatState]);
@@ -336,7 +336,7 @@ function SettingsComponent({
         ) : null}
         <SettingItem
           name="Note Import Location"
-          description="Notes imported from Zotero will be added to this folder in your vault."
+          description="Default folder for new notes when an import format output path is only a file name. Output paths that already include folders are used as written."
         >
           <div className="zt-picker-field">
             <input
@@ -417,7 +417,7 @@ function SettingsComponent({
       >
         <SettingItem
           name="Preserved properties"
-          description="Frontmatter properties that should keep hand-edited values during re-imports. Use one property per line."
+          description="Existing frontmatter properties copied back after an update or re-import. Use one property per line."
         >
           <div className="zt-settings-textarea-field">
             <textarea
@@ -431,8 +431,9 @@ function SettingsComponent({
               }}
             />
             <p className="zt-settings-field-note">
-              Known Zotero/frontmatter keys and properties already present in
-              this vault are accepted.
+              This applies when an existing note is overwritten. Known
+              Zotero/frontmatter keys and properties already present in this
+              vault are accepted.
             </p>
             <ValidationWarning
               label="Unknown preserved properties"
@@ -546,7 +547,7 @@ function SettingsComponent({
         </SettingItem>
         <SettingItem
           name="Monitor import format"
-          description="Import format used when importing selected missing items."
+          description="Import format used by missing-note imports and updates. Leave blank to use the first import format."
         >
           <select
             className="dropdown"
