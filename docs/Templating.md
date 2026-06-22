@@ -53,7 +53,7 @@ Please see the [Nunjucks docs](https://mozilla.github.io/nunjucks/templating.htm
 
 ## Where do I store my templates?
 
-Templates can reside anywhere in your Obsidian vault. The path to the template is supplied in the import settings. The template path is optional; when it is blank, imports use the built-in minimal Literature Note template.
+Templates can reside anywhere in your Obsidian vault. The path to the template is supplied in the import settings. The template path is optional; when it is blank, imports use the built-in Literature Note template with common Zotero frontmatter, links, abstract, a preserved notes section, and annotation sections.
 
 
 

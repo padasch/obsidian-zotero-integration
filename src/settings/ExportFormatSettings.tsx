@@ -175,8 +175,8 @@ export function ExportFormatSettings({
           </button>
         </div>
         <div className="zt-format__input-note">
-          Optional. Leave blank to use the built-in minimal Literature Note
-          template. Choose a markdown file only if you want to fully control the
+          Optional. Leave blank to use the built-in Literature Note template.
+          Choose a markdown file only if you want to fully control the
           generated note body. Custom templates can use <pre>{'{% persist %}'}</pre>{' '}
           blocks for sections that should survive updates. Use the Test import
           template command to inspect available data. Templates are written using{' '}

@@ -19,7 +19,8 @@ Back up your vault and plugin configuration before installing, upgrading, or exp
   - note import folder
   - template file path
   - citation / bibliography style
-- A built-in minimal Literature Note template is used when Template File is blank.
+- A built-in Literature Note template is used when Template File is blank. It includes Zotero identity fields, links, abstract, tag/collection metadata, annotation/task counts, a preserved notes section, and annotation sections.
+- Optional scite metadata can add or refresh `zoteroScite*` frontmatter fields on import when enabled, or through the refresh command for existing notes.
 - Optional post-import opening of a fixed markdown or Obsidian `.base` file, useful for a Bases literature overview.
 - Missing-reference review modal actions:
   - Import & close

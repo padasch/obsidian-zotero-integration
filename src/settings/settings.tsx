@@ -177,6 +177,13 @@ function SettingsComponent({
     !!settings.zoteroMonitorCheckOnStartup
   );
 
+  const [zoteroSciteEnabled, setZoteroSciteEnabled] = React.useState(
+    !!settings.zoteroSciteEnabled
+  );
+
+  const [zoteroSciteRefreshOnImport, setZoteroSciteRefreshOnImport] =
+    React.useState(settings.zoteroSciteRefreshOnImport !== false);
+
   const [zoteroItemTableColumnsText, setZoteroItemTableColumnsText] =
     React.useState(() =>
       formatLineInput(
@@ -544,6 +551,62 @@ function SettingsComponent({
             })}
           </div>
         </SettingItem>
+        <SettingsSection
+          title="scite metadata"
+          description="Fetch citation-statement tallies into literature-note frontmatter."
+          collapsible
+          defaultOpen={!!settings.zoteroSciteEnabled}
+          level={3}
+        >
+          <SettingItem
+            name="Enable scite metadata"
+            description="Allow imports to request scite metadata for notes with a DOI. The refresh command can still be run manually."
+          >
+            <div
+              onClick={() => {
+                setZoteroSciteEnabled((state) => {
+                  updateSetting('zoteroSciteEnabled', !state);
+                  return !state;
+                });
+              }}
+              className={`checkbox-container${
+                zoteroSciteEnabled ? ' is-enabled' : ''
+              }`}
+            />
+          </SettingItem>
+          <SettingItem
+            name="Refresh scite on import"
+            description="When scite metadata is enabled, add or update scite frontmatter after each successful import."
+          >
+            <div
+              onClick={() => {
+                setZoteroSciteRefreshOnImport((state) => {
+                  updateSetting('zoteroSciteRefreshOnImport', !state);
+                  return !state;
+                });
+              }}
+              className={`checkbox-container${
+                zoteroSciteRefreshOnImport ? ' is-enabled' : ''
+              }`}
+            />
+          </SettingItem>
+          <SettingItem
+            name="scite API token"
+            description="Optional. Leave blank for unauthenticated requests; add a token if your scite account requires one."
+          >
+            <input
+              type="password"
+              spellCheck={false}
+              defaultValue={settings.zoteroSciteApiToken || ''}
+              onChange={(e) =>
+                updateSetting(
+                  'zoteroSciteApiToken',
+                  (e.target as HTMLInputElement).value.trim()
+                )
+              }
+            />
+          </SettingItem>
+        </SettingsSection>
       </SettingsSection>
 
       <SettingsDivider />

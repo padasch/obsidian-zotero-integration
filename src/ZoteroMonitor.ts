@@ -1,4 +1,4 @@
-import { App, Modal, Notice, TFile, request } from 'obsidian';
+import { App, Modal, Notice, TFile } from 'obsidian';
 
 import type ZoteroConnector from './main';
 import {
@@ -35,6 +35,12 @@ import {
   getCollectionFromCiteKey,
   getItemJSONFromCiteKeys,
 } from './bbt/jsonRPC';
+import {
+  applyScitePropertiesToFrontmatter,
+  fetchSciteTallies,
+  getNoteDoi,
+  normalizeDoi,
+} from './scite';
 
 const BATCH_SIZE = 50;
 const MONITOR_ITEM_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -42,17 +48,6 @@ const MONITOR_PRELOAD_DELAY_MS = 1500;
 const DEFAULT_ORPHANED_PROPERTY = 'zoteroOrphaned';
 const ORPHANED_CHECKED_AT_PROPERTY = 'zoteroOrphanedCheckedAt';
 const ORPHANED_REASON_PROPERTY = 'zoteroOrphanedReason';
-const SCITE_PROPERTIES = [
-  'zoteroSciteCitingPublications',
-  'zoteroSciteContradicting',
-  'zoteroSciteMentioning',
-  'zoteroSciteStatus',
-  'zoteroSciteSupporting',
-  'zoteroSciteTotalStatements',
-  'zoteroSciteUnclassified',
-  'zoteroSciteUpdatedAt',
-  'zoteroSciteURL',
-];
 type MonitorQuickSelect = 'none' | 'today' | 'all';
 type MonitorSelectionMode = MonitorQuickSelect | 'custom';
 type MonitorSortDirection = 'asc' | 'desc';
@@ -79,15 +74,6 @@ type MatchedLiteratureNote = ExistingLiteratureNote & {
 };
 type OrphanedLiteratureNote = ExistingLiteratureNote & {
   reason: string;
-};
-type SciteTallies = {
-  citingPublications?: number;
-  contradicting?: number;
-  doi: string;
-  mentioning?: number;
-  supporting?: number;
-  total?: number;
-  unclassified?: number;
 };
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -147,14 +133,6 @@ function getItemString(
   }
 
   return '';
-}
-
-function normalizeDoi(value: string): string {
-  return value
-    .trim()
-    .replace(/^https?:\/\/(dx\.)?doi\.org\//i, '')
-    .replace(/^doi:\s*/i, '')
-    .trim();
 }
 
 function getBestPaperLink(item: ZoteroMonitorItem): PaperLink {
@@ -267,12 +245,6 @@ function getNoteLibraryID(frontmatter: Record<string, any>): number | undefined 
   );
 }
 
-function getNoteDoi(frontmatter: Record<string, any>): string {
-  return normalizeDoi(
-    firstFrontmatterValue(frontmatter, ['zoteroDOI', 'DOI', 'doi'])
-  );
-}
-
 function getExistingNoteIdentity(
   file: TFile,
   frontmatter: Record<string, any>
@@ -381,92 +353,6 @@ function candidateMatchesRequest(
   return (
     requested.libraryID === undefined ||
     Number(requested.libraryID) === Number(candidate.libraryID)
-  );
-}
-
-function normalizeSciteNumber(source: Record<string, any>, keys: string[]) {
-  for (const key of keys) {
-    const value = source[key];
-    if (value === null || value === undefined || value === '') continue;
-
-    const parsed = Number(value);
-    if (!Number.isNaN(parsed)) return parsed;
-  }
-
-  return undefined;
-}
-
-function sciteReportUrl(doi: string): string {
-  return `https://scite.ai/reports/${encodeURI(normalizeDoi(doi))}`;
-}
-
-function normalizeSciteTallies(payload: any, doi: string): SciteTallies {
-  const source = payload?.tallies || payload?.result || payload || {};
-
-  return {
-    citingPublications: normalizeSciteNumber(source, [
-      'citingPublications',
-      'citingPublicationsValue',
-      'citing_publications',
-    ]),
-    contradicting: normalizeSciteNumber(source, [
-      'contradicting',
-      'contradictingValue',
-      'contrasting',
-      'contrastingValue',
-    ]),
-    doi: normalizeDoi(source.doi || source.DOI || doi),
-    mentioning: normalizeSciteNumber(source, ['mentioning', 'mentioningValue']),
-    supporting: normalizeSciteNumber(source, ['supporting', 'supportingValue']),
-    total: normalizeSciteNumber(source, ['total', 'totalValue']),
-    unclassified: normalizeSciteNumber(source, [
-      'unclassified',
-      'unclassifiedValue',
-    ]),
-  };
-}
-
-function scitePropertiesFromTallies(
-  tallies: SciteTallies,
-  updatedAt = new Date().toISOString()
-): Record<string, unknown> {
-  const doi = normalizeDoi(tallies.doi);
-
-  return {
-    zoteroSciteCitingPublications: tallies.citingPublications,
-    zoteroSciteContradicting: tallies.contradicting,
-    zoteroSciteMentioning: tallies.mentioning,
-    zoteroSciteStatus: 'ok',
-    zoteroSciteSupporting: tallies.supporting,
-    zoteroSciteTotalStatements: tallies.total,
-    zoteroSciteUnclassified: tallies.unclassified,
-    zoteroSciteUpdatedAt: updatedAt,
-    zoteroSciteURL: doi ? sciteReportUrl(doi) : undefined,
-  };
-}
-
-async function fetchSciteTallies(
-  doi: string,
-  apiToken?: string
-): Promise<Record<string, unknown>> {
-  const normalizedDoi = normalizeDoi(doi);
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-  };
-  const token = String(apiToken || '').trim();
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const response = await request({
-    method: 'GET',
-    url: `https://api.scite.ai/tallies/${encodeURI(normalizedDoi)}`,
-    headers,
-  });
-
-  return scitePropertiesFromTallies(
-    normalizeSciteTallies(JSON.parse(response), normalizedDoi)
   );
 }
 
@@ -1797,15 +1683,7 @@ export class ZoteroMonitor {
         await this.plugin.app.fileManager.processFrontMatter(
           file,
           (targetFrontmatter) => {
-            for (const key of SCITE_PROPERTIES) {
-              delete targetFrontmatter[key];
-            }
-
-            for (const [key, value] of Object.entries(properties)) {
-              if (value !== undefined) {
-                targetFrontmatter[key] = value;
-              }
-            }
+            applyScitePropertiesToFrontmatter(targetFrontmatter, properties);
           }
         );
         refreshed += 1;

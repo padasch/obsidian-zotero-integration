@@ -21,6 +21,20 @@ export function loadTemplate(
 
 export const DEFAULT_LITERATURE_NOTE_TEMPLATE = `---
 title: "{{ title | replace('"', "'") }}"
+{% if abstractNote -%}
+zoteroAbstract: "{{ abstractNote | replace('"', "'") | replace("\\n", " ") }}"
+{% endif -%}
+{% if annotations and annotations.length -%}
+{% set activeTaskAnnotations = annotations | filterby("colorCategory", "contains", "Gray", "Magenta", "Purple") -%}
+zoteroAnnotationCount: {{ annotations.length }}
+zoteroOpenTaskCount: {{ activeTaskAnnotations.length }}
+zoteroOpenTasks: {% if activeTaskAnnotations.length %}true{% else %}false{% endif %}
+{% else -%}
+{% set activeTaskAnnotations = [] -%}
+zoteroAnnotationCount: 0
+zoteroOpenTaskCount: 0
+zoteroOpenTasks: false
+{% endif -%}
 {% if citationKey or citekey -%}
 aliases:
   - "@{{ citationKey or citekey }}: {{ title | replace('"', "'") }}"
@@ -42,41 +56,81 @@ zoteroYear: "{{ date | format("YYYY") }}"
 {% if itemType -%}
 zoteroType: "{{ itemType }}"
 {% endif -%}
-{% if authors -%}
-zoteroAuthors: "{{ authors | replace('"', "'") }}"
+{% if creators and creators.length -%}
+zoteroAuthors:
+{% for creator in creators -%}
+{% if creator.name -%}
+  - "{{ creator.name | replace('"', "'") }}"
+{% else -%}
+  - "{{ creator.firstName or '' }} {{ creator.lastName or '' }}"
 {% endif -%}
-{% set publication = publicationTitle or proceedingsTitle or bookTitle or publisher -%}
+{% endfor -%}
+{% elif authors -%}
+zoteroAuthors:
+  - "{{ authors | replace('"', "'") }}"
+{% endif -%}
+{% set publication = publicationTitle or proceedingsTitle or bookTitle -%}
 {% if publication -%}
 zoteroPublication: "{{ publication | replace('"', "'") }}"
+{% endif -%}
+{% if publisher -%}
+zoteroPublisher: "{{ publisher | replace('"', "'") }}"
 {% endif -%}
 {% if DOI or doi -%}
 zoteroDOI: "{{ DOI or doi }}"
 {% endif -%}
 {% if url -%}
-zoteroURL: "{{ url }}"
+zoteroURL: "[weblink]({{ url }})"
 {% endif -%}
 {% if desktopURI -%}
-zoteroURI: "{{ desktopURI }}"
+zoteroURI: "[zotero item]({{ desktopURI }})"
 {% endif -%}
+{% set localPdf = pdfLink or "no pdf available" -%}
+zoteroPDF: "{{ localPdf | replace('"', "'") }}"
+{% set readerLink = pdfZoteroLink or "no pdf available" -%}
+zoteroReader: "{{ readerLink | replace('"', "'") }}"
 {% if dateAdded -%}
 zoteroDateAdded: "{{ dateAdded | format("YYYY-MM-DD") }}"
 {% endif -%}
 {% if dateModified -%}
 zoteroDateModified: "{{ dateModified | format("YYYY-MM-DD") }}"
 {% endif -%}
-{% if tags and tags.length -%}
 zoteroTags:
+{% if tags and tags.length -%}
 {% for tag in tags -%}
 {% set tagName = tag.tag or tag.name or tag -%}
   - "{{ tagName | replace('"', "'") }}"
 {% endfor -%}
+{% else %}
+  - "/notags"
 {% endif -%}
 {% if collections and collections.length -%}
 zoteroCollections:
-{% for collection in collections -%}
+{% for collection in collections %}
 {% set collectionName = collection.fullPath or collection.name or collection -%}
   - "{{ collectionName | replace('"', "'") }}"
 {% endfor -%}
+{% endif -%}
+{% if zoteroProject and zoteroProject.length -%}
+zoteroProject:
+{% for project in zoteroProject %}
+  - "{{ project | replace('"', "'") }}"
+{% endfor -%}
+{% endif -%}
+{% if zoteroTopic and zoteroTopic.length -%}
+zoteroTopic:
+{% for topic in zoteroTopic %}
+  - "{{ topic | replace('"', "'") }}"
+{% endfor -%}
+{% endif -%}
+{% if zoteroNote -%}
+zoteroNote: "{{ zoteroNote | replace('"', "'") }}"
+{% endif -%}
+{% if zoteroStatus -%}
+zoteroStatus: "{{ zoteroStatus | replace('"', "'") }}"
+{% endif -%}
+{% if zoteroSummary is defined -%}
+zoteroSummary: "{{ zoteroSummary | replace('"', "'") }}"
 {% endif -%}
 ---
 
@@ -90,11 +144,59 @@ zoteroCollections:
 > [!abstract] Abstract
 > {{ abstractNote | replace("\\n", " ") }}
 {% endif %}
+> [!summary] Automated Metadata
+> **Paper**
+> - Title: {{ title }}
+{% if date -%}
+> - Year: {{ date | format("YYYY") }}
+{% endif -%}
+{% if authors -%}
+> - Authors: {{ authors }}
+{% endif -%}
+{% if itemType -%}
+> - Item type: {{ itemType }}
+{% endif -%}
+{% if publication -%}
+> - Publication: {{ publication }}
+{% endif -%}
+{% if bibliography -%}
+> - Bibliography: {{ bibliography }}
+{% endif -%}
+> - Zotero tags: {% if allTags %}{{ allTags }}{% else %}/notags{% endif %}
+>
+> **Links**
+{% if desktopURI -%}
+> - [zotero item]({{ desktopURI }})
+{% endif -%}
+> - Zotero reader: {{ readerLink }}
+{% if url -%}
+> - [weblink]({{ url }})
+{% endif -%}
+> - Local pdf: {{ localPdf }}
+{% if DOI or doi -%}
+> - DOI: {{ DOI or doi }}
+{% endif -%}
+>
+> **Import**
+{% if dateAdded -%}
+> - Date added: {{ dateAdded | format("YYYY-MM-DD") }}
+{% endif -%}
+{% if importDate -%}
+> - Last import: {{ importDate | format("YYYY-MM-DD") }}
+{% endif -%}
+{% if citationKey or citekey -%}
+> - Citation key: {{ citationKey or citekey }}
+{% endif %}
+
+## Notes
+
+{% persist "notes" %}
+{% endpersist %}
+
 {% if annotations and annotations.length -%}
-{% set followUpAnnotations = annotations | filterby("colorCategory", "contains", "Gray", "Magenta", "Purple") -%}
-{% if followUpAnnotations.length -%}
+{% if activeTaskAnnotations.length -%}
 > [!todo]+ Follow-up Annotations
-{% for annotation in followUpAnnotations -%}
+{% for annotation in activeTaskAnnotations -%}
 {% if annotation.annotatedText -%}
 > - {{ annotation.annotatedText | nl2br }}{% if annotation.desktopURI %} ([Ref]({{ annotation.desktopURI }})){% endif %}
 {% elif annotation.comment -%}
@@ -108,7 +210,7 @@ zoteroCollections:
 {% endfor %}
 
 {% endif -%}
-## Annotations
+## All Annotations
 
 {% for annotation in annotations -%}
 {% set annotationColor = annotation.colorCategory or "gray" -%}

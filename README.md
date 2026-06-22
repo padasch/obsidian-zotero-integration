@@ -14,7 +14,7 @@ Before installing/updating this plugin in your vault, make a backup of:
 
 ## Current version
 
-Current plugin version: **3.2.18**.
+Current plugin version: **3.2.19**.
 
 ## Install
 
@@ -53,7 +53,8 @@ Current plugin version: **3.2.18**.
 - **Multi-step missing-reference imports** in the review modal:
   - `Import & close`
   - `Import & continue`
-- **Built-in Literature Note template** so a template file is optional for normal imports.
+- **Built-in Literature Note template** so a template file is optional for normal imports. It includes Zotero identity fields, links, abstract, tag/collection metadata, annotation/task counts, a preserved notes section, and annotation sections.
+- **Optional scite metadata** can refresh scite citation-statement frontmatter on import when enabled, or via the refresh command for existing notes.
 - **Optional post-import overview file** so imports can open a fixed markdown note or Obsidian `.base` file such as a Bases literature dashboard.
 - **Faster missing-reference review** through background Zotero metadata caching.
 - **Online paper links** in the missing-reference table, using DOI/publisher URL or a Scholar search fallback.
@@ -79,6 +80,8 @@ You can control how many recent days it considers (`Recent Zotero items`), scope
 The **Zotero item table columns** setting controls item tables used by Zotero import/review workflows. Enter one column key per line; the order of the lines controls the order of the table. Supported columns include `title`, `citekey`, `creators`, `year`, `date`, `publication`, `publisher`, `itemType`, `dateAdded`, `tags`, `collections`, `doi`, and `url`.
 
 The **Preserved properties** setting also uses one property per line. During updates or re-imports, matching values from the existing note are copied back after the note is rendered. Both settings show warnings for entries the plugin cannot match.
+
+The scite metadata settings live in the same section. When enabled, imports with a DOI can add `zoteroScite*` frontmatter fields. The `Refresh scite metadata` command can update existing literature notes.
 
 ### Default-style folder/file/style entry fields
 

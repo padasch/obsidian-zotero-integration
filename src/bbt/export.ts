@@ -12,6 +12,7 @@ import {
   ZoteroConnectorSettings,
   ZoteroManagedUserProperties,
 } from '../types';
+import { getItemDoi, writeScitePropertiesForFile } from '../scite';
 import { applyBasicTemplates } from './basicTemplates/applyBasicTemplates';
 import { CiteKey, getCiteKeyFromAny, getCiteKeys } from './cayw';
 import { processZoteroAnnotationNotes } from './exportNotes';
@@ -742,6 +743,25 @@ async function writePreservedProperties(
   });
 }
 
+async function refreshSciteMetadataOnImport(
+  file: TFile,
+  item: Record<string, unknown>,
+  settings: ZoteroConnectorSettings
+) {
+  if (!settings.zoteroSciteEnabled) return;
+  if (settings.zoteroSciteRefreshOnImport === false) return;
+
+  try {
+    await writeScitePropertiesForFile(
+      file,
+      getItemDoi(item),
+      settings.zoteroSciteApiToken
+    );
+  } catch (error) {
+    console.error('Unable to refresh scite metadata after import', error);
+  }
+}
+
 export async function exportToMarkdown(
   params: ExportToMarkdownParams,
   explicitCiteKeys?: CiteKey[]
@@ -983,6 +1003,7 @@ export async function exportToMarkdown(
           await app.vault.modify(file, rendered);
           await writeManagedProperties(file, params.managedProperties);
           await writePreservedProperties(file, data.frontmatter, settings);
+          await refreshSciteMetadataOnImport(file, item, settings);
           await params.afterWrite?.(file, item, markdownPath);
           createdOrUpdatedMarkdownFiles.push(markdownPath);
         } else {
@@ -1000,6 +1021,7 @@ export async function exportToMarkdown(
             await app.vault.modify(file, rendered);
             await writeManagedProperties(file, params.managedProperties);
             await writePreservedProperties(file, data.frontmatter, settings);
+            await refreshSciteMetadataOnImport(file, item, settings);
             await params.afterWrite?.(file, item, markdownPath);
             createdOrUpdatedMarkdownFiles.push(markdownPath);
           }
@@ -1008,6 +1030,7 @@ export async function exportToMarkdown(
         await mkMDDir(markdownPath);
         const createdFile = await app.vault.create(markdownPath, rendered);
         await writeManagedProperties(createdFile, params.managedProperties);
+        await refreshSciteMetadataOnImport(createdFile, item, settings);
         await params.afterWrite?.(createdFile, item, markdownPath);
         createdOrUpdatedMarkdownFiles.push(markdownPath);
       }

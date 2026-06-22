@@ -18,7 +18,7 @@ The base file name of exported images. For example, `@{{citekey}}-image` results
 
 ### Template file
 
-The Template File setting is optional. Leave it blank to use the built-in minimal Literature Note template. Choose a markdown file only when you want to fully control the generated note body.
+The Template File setting is optional. Leave it blank to use the built-in Literature Note template, which includes common Zotero frontmatter, links, abstract, a preserved notes section, and annotation sections. Choose a markdown file only when you want to fully control the generated note body.
 
 Custom templates can use `{% persist "section-id" %}` blocks to preserve hand-written sections during updates.
 

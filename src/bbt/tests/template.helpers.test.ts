@@ -41,6 +41,14 @@ describe('getTemplates', () => {
       authors: 'Smith, Jane',
       publicationTitle: 'Journal of Examples',
       DOI: '10.1000/example',
+      url: 'https://example.com/paper',
+      desktopURI: 'zotero://select/library/items/ABC123',
+      dateAdded: moment('2026-06-18', 'YYYY-MM-DD'),
+      importDate: moment('2026-06-19', 'YYYY-MM-DD'),
+      zoteroProject: ['[[Project A]]'],
+      zoteroTopic: ['ecosystem'],
+      zoteroNote: 'Read for methods',
+      zoteroStatus: 'new',
       annotations: [
         {
           colorCategory: 'Gray',
@@ -56,8 +64,25 @@ describe('getTemplates', () => {
     expect(output).toContain('zoteroLibraryID: 1');
     expect(output).toContain('zoteroItemKey: "ABC123"');
     expect(output).toContain('zoteroYear: "2026"');
+    expect(output).toContain('zoteroAnnotationCount: 1');
+    expect(output).toContain('zoteroOpenTaskCount: 1');
+    expect(output).toContain('zoteroOpenTasks: true');
+    expect(output).toContain('zoteroPDF: "no pdf available"');
+    expect(output).toContain('zoteroReader: "no pdf available"');
+    expect(output).toContain('zoteroURL: "[weblink](https://example.com/paper)"');
+    expect(output).toContain(
+      'zoteroURI: "[zotero item](zotero://select/library/items/ABC123)"'
+    );
+    expect(output).toMatch(/zoteroProject:\s*\n {2}- "\[\[Project A\]\]"/);
+    expect(output).toMatch(/zoteroTopic:\s*\n {2}- "ecosystem"/);
+    expect(output).toContain('zoteroNote: "Read for methods"');
+    expect(output).toContain('zoteroStatus: "new"');
+    expect(output).toMatch(/zoteroTags:\s*\n {2}- "\/notags"/);
+    expect(output).toContain('Automated Metadata');
+    expect(output).toContain('## Notes');
+    expect(output).toContain('%% begin notes %%');
     expect(output).toContain('Follow-up Annotations');
-    expect(output).toContain('## Annotations');
+    expect(output).toContain('## All Annotations');
     expect(output).toContain('Follow this up');
   });
 });
