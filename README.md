@@ -14,7 +14,7 @@ Before installing/updating this plugin in your vault, make a backup of:
 
 ## Current version
 
-Current plugin version: **3.2.19**.
+Current plugin version: **3.2.20**.
 
 ## Install
 

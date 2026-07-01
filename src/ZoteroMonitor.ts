@@ -119,6 +119,15 @@ function splitBulkInput(value: string): string[] {
     .filter((part) => !!part);
 }
 
+function defaultManagedProperties(): ZoteroManagedUserProperties {
+  return {
+    zoteroProject: [],
+    zoteroTopic: [],
+    zoteroNote: '',
+    zoteroStatus: 'new',
+  };
+}
+
 function getItemString(
   item: ZoteroMonitorItem,
   keys: string[]
@@ -519,17 +528,17 @@ class ZoteroItemImportModal extends Modal {
   private sortKey: MonitorSortKey = 'dateAdded';
   private sortDirection: MonitorSortDirection = 'desc';
   private tableColumns: ZoteroItemTableColumn[];
-  private managedProperties: ZoteroManagedUserProperties = {
-    zoteroProject: [],
-    zoteroTopic: [],
-    zoteroNote: '',
-    zoteroStatus: 'new',
-  };
+  private managedProperties: ZoteroManagedUserProperties =
+    defaultManagedProperties();
   private isImporting = false;
   private listEl: HTMLDivElement;
   private selectionSummaryEl: HTMLDivElement;
   private importButton: HTMLButtonElement;
   private importButtonContinue: HTMLButtonElement;
+  private projectInputEl: HTMLInputElement;
+  private topicInputEl: HTMLInputElement;
+  private statusInputEl: HTMLInputElement;
+  private noteInputEl: HTMLTextAreaElement;
   private quickSelectButtons: { [key in MonitorQuickSelect]: HTMLButtonElement | null } = {
     none: null,
     today: null,
@@ -727,6 +736,7 @@ class ZoteroItemImportModal extends Modal {
       this.items = this.items.filter((item) => !imported.has(itemIdentity(item)));
       this.selected.clear();
       this.selectionAnchorKey = null;
+      this.resetManagedProperties();
       this.quickSelect = 'custom';
       this.renderList();
 
@@ -753,7 +763,7 @@ class ZoteroItemImportModal extends Modal {
     const grid = fields.createDiv('zt-monitor-bulk-grid');
     const projectSuggestions = this.getProjectSuggestions();
     const topicSuggestions = this.getTopicSuggestions();
-    this.renderBulkInput(
+    this.projectInputEl = this.renderBulkInput(
       grid,
       'Projects',
       '[[Project A]], [[Project B]]',
@@ -763,7 +773,7 @@ class ZoteroItemImportModal extends Modal {
       '',
       projectSuggestions
     );
-    this.renderBulkInput(
+    this.topicInputEl = this.renderBulkInput(
       grid,
       'Topics',
       'photosynthesis, drought',
@@ -773,12 +783,21 @@ class ZoteroItemImportModal extends Modal {
       '',
       topicSuggestions
     );
-    this.renderBulkInput(grid, 'Status', 'new', (value) => {
+    this.statusInputEl = this.renderBulkInput(grid, 'Status', 'new', (value) => {
       this.managedProperties.zoteroStatus = value.trim() || 'new';
     }, 'new');
-    this.renderBulkTextarea(grid, 'Context note', 'Why this paper entered the queue', (value) => {
+    this.noteInputEl = this.renderBulkTextarea(grid, 'Context note', 'Why this paper entered the queue', (value) => {
       this.managedProperties.zoteroNote = value.trim();
     });
+  }
+
+  private resetManagedProperties() {
+    this.managedProperties = defaultManagedProperties();
+
+    if (this.projectInputEl) this.projectInputEl.value = '';
+    if (this.topicInputEl) this.topicInputEl.value = '';
+    if (this.statusInputEl) this.statusInputEl.value = 'new';
+    if (this.noteInputEl) this.noteInputEl.value = '';
   }
 
   private renderBulkInput(
@@ -807,6 +826,7 @@ class ZoteroItemImportModal extends Modal {
       input.setAttribute('list', datalistId);
     }
     input.addEventListener('input', () => onChange(input.value));
+    return input;
   }
 
   private renderBulkTextarea(
@@ -814,7 +834,7 @@ class ZoteroItemImportModal extends Modal {
     labelText: string,
     placeholder: string,
     onChange: (value: string) => void
-  ) {
+  ): HTMLTextAreaElement {
     const field = container.createDiv('zt-monitor-bulk-field');
     field.addClass('zt-monitor-bulk-field-wide');
     field.createEl('label', { text: labelText });
@@ -822,6 +842,7 @@ class ZoteroItemImportModal extends Modal {
     textarea.placeholder = placeholder;
     textarea.rows = 2;
     textarea.addEventListener('input', () => onChange(textarea.value));
+    return textarea;
   }
 
   private getProjectSuggestions(): string[] {
