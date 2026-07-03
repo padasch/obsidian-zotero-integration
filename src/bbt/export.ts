@@ -31,6 +31,7 @@ import {
   getItemJSONFromCiteKeys,
   getItemJSONFromRelations,
 } from './jsonRPC';
+import { applyNewNoteDefaults } from './newNoteDefaults';
 import { PersistExtension, renderTemplate } from './template.env';
 import {
   appendExportDate,
@@ -719,6 +720,15 @@ async function writeManagedProperties(
   });
 }
 
+async function writeNewNoteDefaults(
+  file: TFile,
+  managedProperties?: ZoteroManagedUserProperties
+) {
+  await app.fileManager.processFrontMatter(file, (frontmatter) => {
+    applyNewNoteDefaults(frontmatter, managedProperties);
+  });
+}
+
 async function writePreservedProperties(
   file: TFile,
   existingFrontmatter: Record<string, any> | null,
@@ -1030,6 +1040,7 @@ export async function exportToMarkdown(
         await mkMDDir(markdownPath);
         const createdFile = await app.vault.create(markdownPath, rendered);
         await writeManagedProperties(createdFile, params.managedProperties);
+        await writeNewNoteDefaults(createdFile, params.managedProperties);
         await refreshSciteMetadataOnImport(createdFile, item, settings);
         await params.afterWrite?.(createdFile, item, markdownPath);
         createdOrUpdatedMarkdownFiles.push(markdownPath);
