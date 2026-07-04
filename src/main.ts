@@ -228,6 +228,14 @@ export default class ZoteroConnector extends Plugin {
     });
 
     this.addCommand({
+      id: 'zdc-update-all-literature-notes',
+      name: 'Update all literature notes',
+      callback: () => {
+        this.zoteroMonitor.runUpdateAllNotes();
+      },
+    });
+
+    this.addCommand({
       id: 'zdc-generate-literature-evidence-map',
       name: 'Generate literature synthesis report',
       callback: () => {

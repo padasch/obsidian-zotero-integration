@@ -1233,7 +1233,7 @@ class ZoteroUpdateNotesModal extends Modal {
     app: App,
     private notes: MatchedLiteratureNote[],
     tableColumns: string[],
-    private onUpdate: (notes: MatchedLiteratureNote[]) => Promise<void>,
+    private onUpdate: (notes: MatchedLiteratureNote[]) => Promise<string[]>,
     private onFinished: () => void
   ) {
     super(app);
@@ -1607,13 +1607,7 @@ export class ZoteroMonitor {
     this.modalOpen = true;
     try {
       const items = await this.getMonitorItems(true);
-      const notes = this.getExistingLiteratureNotes();
-      const matched = notes
-        .map((note) => {
-          const item = getMatchedItem(note, items);
-          return item ? ({ ...note, item } as MatchedLiteratureNote) : null;
-        })
-        .filter((note): note is MatchedLiteratureNote => !!note);
+      const matched = this.getMatchedExistingLiteratureNotes(items);
 
       if (!matched.length) {
         this.modalOpen = false;
@@ -1635,6 +1629,41 @@ export class ZoteroMonitor {
     } catch (error) {
       this.modalOpen = false;
       new Notice('Failed to check existing Zotero notes.', 10000);
+      console.error(error);
+    }
+  }
+
+  async runUpdateAllNotes() {
+    try {
+      const items = await this.getMonitorItems(true);
+      const matched = this.getMatchedExistingLiteratureNotes(items);
+
+      if (!matched.length) {
+        new Notice('No existing Zotero literature notes found to update.');
+        return;
+      }
+
+      const notice = new Notice(
+        `Updating ${matched.length} Zotero literature note${
+          matched.length === 1 ? '' : 's'
+        }...`,
+        0
+      );
+
+      const updatedPaths = await this.updateExistingNotes(matched, false, false);
+      notice.hide();
+
+      if (!updatedPaths.length) {
+        new Notice('No literature notes were updated.', 7000);
+      } else {
+        new Notice(
+          `Updated ${updatedPaths.length} Zotero literature note${
+            updatedPaths.length === 1 ? '' : 's'
+          }.`
+        );
+      }
+    } catch (error) {
+      new Notice('Failed to update all literature notes.', 10000);
       console.error(error);
     }
   }
@@ -2030,11 +2059,15 @@ export class ZoteroMonitor {
     return notes;
   }
 
-  private async updateExistingNotes(notes: MatchedLiteratureNote[]) {
+  private async updateExistingNotes(
+    notes: MatchedLiteratureNote[],
+    openNotesAfterUpdate = true,
+    notify = true
+  ): Promise<string[]> {
     const exportFormat = this.getMonitorExportFormat();
     if (!exportFormat) {
       new Notice('No Zotero import format selected for updates.', 10000);
-      return;
+      return [];
     }
 
     const database = this.getDatabase();
@@ -2072,12 +2105,30 @@ export class ZoteroMonitor {
       updatedPaths.push(...paths);
     }
 
-    await this.plugin.openNotes(updatedPaths);
-    new Notice(
-      `Updated ${updatedPaths.length} Zotero literature note${
-        updatedPaths.length === 1 ? '' : 's'
-      }.`
-    );
+    if (openNotesAfterUpdate) {
+      await this.plugin.openNotes(updatedPaths);
+    }
+
+    if (notify) {
+      new Notice(
+        `Updated ${updatedPaths.length} Zotero literature note${
+          updatedPaths.length === 1 ? '' : 's'
+        }.`
+      );
+    }
+
+    return updatedPaths;
+  }
+
+  private getMatchedExistingLiteratureNotes(
+    items: ZoteroMonitorItem[]
+  ): MatchedLiteratureNote[] {
+    return this.getExistingLiteratureNotes()
+      .map((note) => {
+        const item = getMatchedItem(note, items);
+        return item ? ({ ...note, item } as MatchedLiteratureNote) : null;
+      })
+      .filter((note): note is MatchedLiteratureNote => !!note);
   }
 
   private async flagOrphanedNotes(notes: OrphanedLiteratureNote[]) {
