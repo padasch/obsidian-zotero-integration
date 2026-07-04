@@ -62,7 +62,6 @@ describe('buildLiteratureReportCorpus()', () => {
             zoteroSciteCitingPublications: 42,
             zoteroAbstract:
               'This abstract includes a comma, and should remain intact.',
-            zoteroKeywords: ['drought', 'canopy dynamics'],
           },
           markdown: [
             '# Canopy drought response',
@@ -95,9 +94,6 @@ describe('buildLiteratureReportCorpus()', () => {
       publication: 'Journal of Tree Water',
       sciteCitingPublications: 42,
     });
-    expect(corpus.sources[0].keywords).toEqual(
-      expect.arrayContaining(['drought', 'canopy dynamics'])
-    );
     expect(corpus.evidence.map((item) => item.id)).toEqual([
       'S1-abstract',
       'S1-annotation-1',
@@ -397,7 +393,7 @@ describe('renderLiteratureSynthesisReport()', () => {
 });
 
 describe('renderLiteratureCompilationReport()', () => {
-  it('renders a simple collection list with abstract, keywords, and annotations', () => {
+  it('renders a simple collection list with abstract and linked numbered annotations', () => {
     const corpus = buildLiteratureReportCorpus(
       [
         {
@@ -408,7 +404,6 @@ describe('renderLiteratureCompilationReport()', () => {
             zoteroTitle: 'Drought paper',
             citekey: 'smith2026',
             zoteroYear: '2026',
-            zoteroKeywords: ['drought', 'water stress'],
             zoteroAbstract: 'Drought abstract evidence.',
           },
           markdown: [
@@ -438,9 +433,13 @@ describe('renderLiteratureCompilationReport()', () => {
     expect(markdown).toContain('> [!info]- Inputs used');
     expect(markdown).toContain('## @smith2026 - Drought paper');
     expect(markdown).toContain('- **Abstract:** Drought abstract evidence.');
-    expect(markdown).toContain('- **Keywords:** drought, water stress');
-    expect(markdown).toContain('- Annotation 1: Annotation evidence one.');
-    expect(markdown).toContain('- Annotation 2: Annotation evidence two.');
+    expect(markdown).toContain(
+      '1. [annotation p. 3](zotero://open-pdf/library/items/PDF123?page=3&annotation=XYZ): Annotation evidence one.'
+    );
+    expect(markdown).toContain(
+      '2. [annotation p. 4](zotero://open-pdf/library/items/PDF123?page=4&annotation=ABC): Annotation evidence two.'
+    );
+    expect(markdown).not.toContain('No keywords available');
     expect(markdown).not.toContain('## Key Synthesis');
     expect(markdown).not.toContain('## Source Footnotes');
   });

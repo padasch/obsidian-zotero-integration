@@ -1012,7 +1012,29 @@ h3.zt-settings-section-title {
 .zt-literature-report-controls {
   display: grid;
   gap: var(--size-4-3);
-  grid-template-columns: minmax(180px, 0.8fr) minmax(240px, 1.2fr);
+  grid-template-columns: 1fr;
+}
+
+.zt-literature-report-panel {
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-3);
+  padding: var(--size-4-3) var(--size-4-4);
+}
+
+.zt-literature-report-panel-title {
+  color: var(--text-normal);
+  font-size: var(--font-ui-medium);
+  margin: 0;
+}
+
+.zt-literature-report-help {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  margin: 0;
 }
 
 .zt-literature-report-field,
@@ -1020,7 +1042,7 @@ h3.zt-settings-section-title {
 .zt-literature-report-preview {
   display: flex;
   flex-direction: column;
-  gap: var(--size-4-1);
+  gap: 0.5rem;
   min-width: 0;
 }
 
@@ -1089,6 +1111,13 @@ h3.zt-settings-section-title {
 }
 
 .zt-literature-report-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-2);
+  justify-content: flex-end;
+}
+
+.zt-literature-report-primary-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--size-4-2);

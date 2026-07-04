@@ -18,7 +18,6 @@ export interface LiteratureReportSource {
   authors: string[];
   year: string;
   publication: string;
-  keywords: string[];
   doi: string;
   url: string;
   zoteroUri: string;
@@ -543,22 +542,6 @@ function cleanTitle(frontmatter: Record<string, unknown>, fallback: string) {
   );
 }
 
-function frontmatterKeywordValues(frontmatter: Record<string, unknown>): string[] {
-  const values = [
-    ...frontmatterValues(frontmatter.zoteroKeywords),
-    ...frontmatterValues(frontmatter.keywords),
-    ...frontmatterValues(frontmatter.zoteroTags),
-    ...frontmatterValues(frontmatter.tags),
-    ...frontmatterValues(frontmatter.tag),
-    ...frontmatterValues(frontmatter.allTags),
-    ...frontmatterValues(frontmatter.hashTags),
-    ...frontmatterValues(frontmatter.zoteroTag),
-    ...frontmatterValues(frontmatter.zoteroTagList),
-  ];
-
-  return uniqueValues(values);
-}
-
 function cleanAuthors(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.map((entry) => frontmatterText(entry)).filter(Boolean);
@@ -642,7 +625,6 @@ export function buildLiteratureReportSource(
       'publicationTitle',
       'publication',
     ]),
-    keywords: frontmatterKeywordValues(frontmatter),
     doi,
     url: zoteroUrl ? cleanHref(zoteroUrl) : doi ? `https://doi.org/${doi}` : '',
     zoteroUri: zoteroUri ? cleanHref(zoteroUri) : '',
@@ -1749,10 +1731,15 @@ function renderCompilationInputsCallout(
   );
 }
 
-function renderSourceKeywordsLine(source: LiteratureReportSource): string {
-  return source.keywords.length
-    ? source.keywords.join(', ')
-    : 'No keywords available';
+function annotationLink(item: LiteratureEvidence): string {
+  if (item.locator && /^Page\s+/i.test(item.locator)) {
+    return markdownLink(
+      `annotation p. ${item.locator.replace(/^Page\s+/i, '')}`,
+      item.href || item.sourcePath
+    );
+  }
+
+  return markdownLink('annotation', item.href || item.sourcePath);
 }
 
 function renderSourceCompilationSection(
@@ -1767,14 +1754,15 @@ function renderSourceCompilationSection(
   const annotationLines = annotations.length
     ? annotations.map(
         (item, annotationIndex) =>
-          `    - Annotation ${annotationIndex + 1}: ${markdownEscape(item.text)}`
+          `    ${annotationIndex + 1}. ${annotationLink(item)}: ${markdownEscape(
+            item.text
+          )}`
       )
-    : ['    - No annotations extracted.'];
+    : ['    1. No annotations extracted.'];
 
   return [
     `## ${source.citekey ? `@${source.citekey}` : `Paper ${index + 1}`} - ${source.title}`,
     `- **Abstract:** ${source.abstractText || 'No abstract available.'}`,
-    `- **Keywords:** ${renderSourceKeywordsLine(source)}`,
     '- **Annotations:**',
     ...annotationLines,
   ].join('\n');

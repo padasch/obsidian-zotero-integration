@@ -207,14 +207,16 @@ export function openLiteratureEvidenceMapModal(plugin: ZoteroConnector) {
 
 class LiteratureEvidenceMapModal extends Modal {
   private scopeProperty: LiteratureReportScopeProperty = 'zoteroProject';
+  private reportType: 'literature-synthesis' | 'literature-compilation' =
+    'literature-synthesis';
   private scopeValue = '';
   private scopeValues: ScopeValuesByProperty = {
     zoteroProject: [],
     zoteroTopic: [],
   };
+  private approachSelectEl: HTMLSelectElement;
   private contextFileEl: HTMLInputElement;
   private generateButton: HTMLButtonElement;
-  private generateCompilationButton: HTMLButtonElement;
   private generatePromptButton: HTMLButtonElement;
   private modeSelectEl: HTMLSelectElement;
   private pastedContextEl: HTMLTextAreaElement;
@@ -231,6 +233,7 @@ class LiteratureEvidenceMapModal extends Modal {
   private synthesisPromptEl: HTMLTextAreaElement;
   private titleInputEl: HTMLInputElement;
   private valueSelectEl: HTMLSelectElement;
+  private synthesisSectionEl: HTMLDivElement;
   private generatedAt: Date | null = null;
 
   constructor(private plugin: ZoteroConnector) {
@@ -256,11 +259,10 @@ class LiteratureEvidenceMapModal extends Modal {
     });
 
     const controls = container.createDiv('zt-literature-report-controls');
+    this.renderApproachControl(controls);
     this.renderScopeControls(controls);
     this.renderTitleControl(controls);
-    this.renderQuestionControl(controls);
-    this.renderContextControls(controls);
-    this.renderPromptControls(controls);
+    this.renderSynthesisControls(controls);
 
     const previewField = container.createDiv('zt-literature-report-preview');
     previewField.createEl('label', { text: 'Markdown preview' });
@@ -275,34 +277,31 @@ class LiteratureEvidenceMapModal extends Modal {
     const actionBar = container.createDiv('zt-literature-report-action-bar');
     this.statusEl = actionBar.createDiv('zt-literature-report-status');
     const buttons = actionBar.createDiv('zt-literature-report-buttons');
+    const primaryActions = buttons.createDiv(
+      'zt-literature-report-primary-actions'
+    );
 
-    const cancelButton = buttons.createEl('button', { text: 'Cancel' });
+    const cancelButton = primaryActions.createEl('button', { text: 'Cancel' });
     cancelButton.type = 'button';
     cancelButton.addEventListener('click', () => this.close());
 
-    this.generateButton = buttons.createEl('button', {
+    this.generateButton = primaryActions.createEl('button', {
       text: 'Generate synthesis report',
     });
     this.generateButton.type = 'button';
     this.generateButton.addClass('mod-cta');
     this.generateButton.addEventListener('click', () => {
-      void this.generateSynthesisPreview();
+      void this.runReportGeneration();
     });
 
-    this.generateCompilationButton = buttons.createEl('button', {
-      text: 'Generate collection compilation',
-    });
-    this.generateCompilationButton.type = 'button';
-    this.generateCompilationButton.addEventListener('click', () => {
-      void this.generateCompilationPreview();
-    });
-
-    this.saveButton = buttons.createEl('button', { text: 'Save report' });
+    this.saveButton = primaryActions.createEl('button', { text: 'Save report' });
     this.saveButton.type = 'button';
     this.saveButton.disabled = true;
     this.saveButton.addEventListener('click', () => {
       void this.saveReport();
     });
+
+    this.updateApproachVisibility();
 
     this.updateStatus();
   }
@@ -312,8 +311,83 @@ class LiteratureEvidenceMapModal extends Modal {
     this.contentEl.empty();
   }
 
+  private renderApproachControl(container: HTMLDivElement) {
+    const approachPanel = container.createDiv(
+      'zt-literature-report-panel zt-literature-report-approach-panel'
+    );
+    approachPanel.createEl('h3', {
+      text: 'Report approach',
+      cls: 'zt-literature-report-panel-title',
+    });
+    approachPanel.createEl('p', {
+      text: 'Choose either an AI-powered synthesis or a raw collection output.',
+      cls: 'zt-literature-report-help',
+    });
+
+    const approachField = approachPanel.createDiv('zt-literature-report-field');
+    approachField.createEl('label', { text: 'Preferred workflow' });
+    this.approachSelectEl = approachField.createEl('select');
+    this.approachSelectEl.addClass('dropdown');
+    this.approachSelectEl.createEl('option', {
+      text: 'AI synthesis',
+      value: 'literature-synthesis',
+    });
+    this.approachSelectEl.createEl('option', {
+      text: 'Raw collection',
+      value: 'literature-compilation',
+    });
+    this.approachSelectEl.value = this.reportType;
+    this.approachSelectEl.addEventListener('change', () => {
+      this.reportType =
+        this.approachSelectEl.value === 'literature-compilation'
+          ? 'literature-compilation'
+          : 'literature-synthesis';
+      this.updateApproachVisibility();
+      this.updateStatus();
+      this.clearPreview();
+    });
+  }
+
+  private renderSynthesisControls(container: HTMLDivElement) {
+    this.synthesisSectionEl = container.createDiv('zt-literature-report-panel');
+    this.synthesisSectionEl.createEl('h3', {
+      text: 'AI synthesis inputs',
+      cls: 'zt-literature-report-panel-title',
+    });
+
+    this.renderQuestionControl(this.synthesisSectionEl);
+    this.renderContextControls(this.synthesisSectionEl);
+    this.renderPromptControls(this.synthesisSectionEl);
+  }
+
+  private updateApproachVisibility() {
+    const isSynthesis = this.reportType === 'literature-synthesis';
+
+    if (this.synthesisSectionEl) {
+      this.synthesisSectionEl.style.display = isSynthesis ? '' : 'none';
+    }
+
+    if (this.generateButton) {
+      this.generateButton.textContent = this.generateButtonLabel();
+    }
+
+    if (this.generatePromptButton) {
+      this.generatePromptButton.style.display = isSynthesis ? '' : 'none';
+    }
+
+    if (this.revisePromptButton) {
+      this.revisePromptButton.style.display = isSynthesis ? '' : 'none';
+    }
+  }
+
   private renderScopeControls(container: HTMLDivElement) {
-    const propertyField = container.createDiv('zt-literature-report-field');
+    const scopePanel = container.createDiv('zt-literature-report-panel');
+    scopePanel.createEl('h3', {
+      text: 'Source scope',
+      cls: 'zt-literature-report-panel-title',
+    });
+
+    const propertyField = scopePanel.createDiv('zt-literature-report-field');
     propertyField.createEl('label', { text: 'Source property' });
     const propertySelect = propertyField.createEl('select');
     propertySelect.addClass('dropdown');
@@ -335,7 +409,7 @@ class LiteratureEvidenceMapModal extends Modal {
       this.updateStatus();
     });
 
-    const valueField = container.createDiv('zt-literature-report-field');
+    const valueField = scopePanel.createDiv('zt-literature-report-field');
     valueField.createEl('label', { text: 'Value' });
     this.valueSelectEl = valueField.createEl('select');
     this.valueSelectEl.addClass('dropdown');
@@ -346,7 +420,7 @@ class LiteratureEvidenceMapModal extends Modal {
     });
     this.renderScopeValueOptions();
 
-    const modeField = container.createDiv('zt-literature-report-field');
+    const modeField = scopePanel.createDiv('zt-literature-report-field');
     modeField.createEl('label', { text: 'Report detail' });
     this.modeSelectEl = modeField.createEl('select');
     this.modeSelectEl.addClass('dropdown');
@@ -361,7 +435,13 @@ class LiteratureEvidenceMapModal extends Modal {
   }
 
   private renderTitleControl(container: HTMLDivElement) {
-    const titleField = container.createDiv('zt-literature-report-field');
+    const titlePanel = container.createDiv('zt-literature-report-panel');
+    titlePanel.createEl('h3', {
+      text: 'Report naming',
+      cls: 'zt-literature-report-panel-title',
+    });
+
+    const titleField = titlePanel.createDiv('zt-literature-report-field');
     titleField.createEl('label', { text: 'Short filename text' });
     this.titleInputEl = titleField.createEl('input');
     this.titleInputEl.type = 'text';
@@ -370,9 +450,7 @@ class LiteratureEvidenceMapModal extends Modal {
   }
 
   private renderQuestionControl(container: HTMLDivElement) {
-    const questionField = container.createDiv(
-      'zt-literature-report-field-wide'
-    );
+    const questionField = container.createDiv('zt-literature-report-field');
     questionField.createEl('label', { text: 'Research question (required)' });
     this.researchQuestionEl = questionField.createEl('textarea');
     this.researchQuestionEl.rows = 2;
@@ -383,9 +461,7 @@ class LiteratureEvidenceMapModal extends Modal {
   }
 
   private renderContextControls(container: HTMLDivElement) {
-    const contextFileField = container.createDiv(
-      'zt-literature-report-field-wide'
-    );
+    const contextFileField = container.createDiv('zt-literature-report-field');
     contextFileField.createEl('label', { text: 'Reference context file' });
     const picker = contextFileField.createDiv('zt-picker-field');
     this.contextFileEl = picker.createEl('input');
@@ -410,7 +486,7 @@ class LiteratureEvidenceMapModal extends Modal {
       });
     });
 
-    const pastedField = container.createDiv('zt-literature-report-field-wide');
+    const pastedField = container.createDiv('zt-literature-report-field');
     pastedField.createEl('label', { text: 'Pasted reference context' });
     this.pastedContextEl = pastedField.createEl('textarea');
     this.pastedContextEl.rows = 4;
@@ -419,9 +495,18 @@ class LiteratureEvidenceMapModal extends Modal {
     this.pastedContextEl.addEventListener('input', () => this.clearPreview());
   }
 
+  private async runReportGeneration() {
+    if (this.reportType === 'literature-synthesis') {
+      await this.generateSynthesisPreview();
+      return;
+    }
+
+    await this.generateCompilationPreview();
+  }
+
   private renderPromptControls(container: HTMLDivElement) {
     const presetField = container.createDiv(
-      'zt-literature-report-field-wide zt-literature-report-prompt-presets'
+      'zt-literature-report-field zt-literature-report-prompt-presets'
     );
     presetField.createEl('label', { text: 'Prompt builder kit' });
     const presetDescription = presetField.createEl('p');
@@ -439,7 +524,7 @@ class LiteratureEvidenceMapModal extends Modal {
       });
     }
 
-    const promptField = container.createDiv('zt-literature-report-field-wide');
+    const promptField = container.createDiv('zt-literature-report-field');
     promptField.createEl('label', { text: 'Synthesis prompt' });
     this.synthesisPromptEl = promptField.createEl('textarea');
     this.synthesisPromptEl.rows = 6;
@@ -448,9 +533,7 @@ class LiteratureEvidenceMapModal extends Modal {
       DEFAULT_LITERATURE_REPORT_PROMPT;
     this.synthesisPromptEl.addEventListener('input', () => this.clearPreview());
 
-    const revisionField = container.createDiv(
-      'zt-literature-report-field-wide'
-    );
+    const revisionField = container.createDiv('zt-literature-report-field');
     revisionField.createEl('label', { text: 'Prompt revision instruction' });
     this.revisionInstructionEl = revisionField.createEl('textarea');
     this.revisionInstructionEl.rows = 2;
@@ -723,7 +806,7 @@ class LiteratureEvidenceMapModal extends Modal {
     }
 
     this.setBusy(true);
-    this.generateButton.textContent = 'Generating report...';
+    this.generateButton.textContent = 'Generating synthesis report...';
     this.setStatus('Reading literature notes...');
 
     try {
@@ -890,7 +973,7 @@ class LiteratureEvidenceMapModal extends Modal {
       );
       new Notice('Failed to generate literature synthesis report.', 10000);
     } finally {
-      this.generateButton.textContent = 'Generate synthesis report';
+      this.generateButton.textContent = this.generateButtonLabel();
       this.setBusy(false);
     }
   }
@@ -902,7 +985,7 @@ class LiteratureEvidenceMapModal extends Modal {
     }
 
     this.setBusy(true);
-    this.generateCompilationButton.textContent = 'Generating compilation...';
+    this.generateButton.textContent = 'Generating collection compilation...';
     this.setStatus('Reading literature notes...');
 
     try {
@@ -947,7 +1030,7 @@ class LiteratureEvidenceMapModal extends Modal {
       );
       new Notice('Failed to generate literature compilation report.', 10000);
     } finally {
-      this.generateCompilationButton.textContent = 'Generate collection compilation';
+      this.generateButton.textContent = this.generateButtonLabel();
       this.setBusy(false);
     }
   }
@@ -1001,14 +1084,19 @@ class LiteratureEvidenceMapModal extends Modal {
     this.reportMarkdown = '';
     if (this.previewEl) this.previewEl.value = '';
     if (this.saveButton) this.saveButton.disabled = true;
-    this.generatedReportType = 'literature-synthesis';
+    this.generatedReportType = this.reportType;
     this.generatedAt = null;
+  }
+
+  private generateButtonLabel(): string {
+    return this.reportType === 'literature-synthesis'
+      ? 'Generate synthesis report'
+      : 'Generate collection compilation';
   }
 
   private setBusy(isBusy: boolean) {
     for (const button of [
       this.generateButton,
-      this.generateCompilationButton,
       this.generatePromptButton,
       this.revisePromptButton,
       this.saveButton,
@@ -1034,7 +1122,7 @@ class LiteratureEvidenceMapModal extends Modal {
     }
 
     this.setStatus(
-      `Ready to generate a synthesis report for ${this.scopeProperty} = ${this.scopeValue}.`
+      `Ready to generate a ${this.reportType === 'literature-synthesis' ? 'synthesis' : 'collection'} report for ${this.scopeProperty} = ${this.scopeValue}.`
     );
   }
 

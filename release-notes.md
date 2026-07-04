@@ -1,4 +1,7 @@
-3.2.28
-- Add a no-dialog command to refresh all existing Zotero literature notes from Zotero: `Update all literature notes`.
-- Preserve existing frontmatter when updating by reusing current update pipeline and existing `zoteroPreservedProperties` behavior.
-- Refactor note update path to share matching logic between selected-note and all-note updates, with options to skip auto-opening after updates.
+## Changes in 3.2.29
+
+- Add a cleaner literature report modal with a dedicated workflow selector: AI synthesis or raw collection.
+- Separate generation modes so buttons and input fields are clearly scoped to the selected approach.
+- Add approach-aware question/context/prompt panels and modernized spacing with panelized controls for better readability.
+- Improve raw collection output to use linked numbered annotations and remove the abstract keyword section.
+- Update GitHub release workflow for current actions versions and publish `versions.json` with releases.
