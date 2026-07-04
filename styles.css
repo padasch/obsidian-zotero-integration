@@ -308,6 +308,28 @@ h3.zt-settings-section-title {
   padding: 0 0.3em;
 }
 
+.zt-ollama-model-field {
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+  min-width: 0;
+  width: 100%;
+}
+
+.zt-ollama-model-control {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-2);
+  min-width: 0;
+}
+
+.zt-ollama-model-control input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
 .zt-finder-suggestion-title {
   color: var(--text-normal);
   font-weight: 600;
@@ -384,39 +406,39 @@ h3.zt-settings-section-title {
   min-height: 400px;
 }
 
-.callout[data-callout^="annotation-"] {
+.callout[data-callout^='annotation-'] {
   --callout-icon: lucide-highlighter;
 }
 
-.callout[data-callout="annotation-yellow"] {
+.callout[data-callout='annotation-yellow'] {
   --callout-color: 255, 212, 0;
 }
 
-.callout[data-callout="annotation-red"] {
+.callout[data-callout='annotation-red'] {
   --callout-color: 255, 102, 102;
 }
 
-.callout[data-callout="annotation-green"] {
+.callout[data-callout='annotation-green'] {
   --callout-color: 95, 178, 54;
 }
 
-.callout[data-callout="annotation-blue"] {
+.callout[data-callout='annotation-blue'] {
   --callout-color: 46, 168, 229;
 }
 
-.callout[data-callout="annotation-purple"] {
+.callout[data-callout='annotation-purple'] {
   --callout-color: 162, 138, 229;
 }
 
-.callout[data-callout="annotation-magenta"] {
+.callout[data-callout='annotation-magenta'] {
   --callout-color: 229, 110, 238;
 }
 
-.callout[data-callout="annotation-orange"] {
+.callout[data-callout='annotation-orange'] {
   --callout-color: 241, 152, 55;
 }
 
-.callout[data-callout="annotation-gray"] {
+.callout[data-callout='annotation-gray'] {
   --callout-color: 170, 170, 170;
 }
 
@@ -1007,6 +1029,15 @@ h3.zt-settings-section-title {
   grid-column: 1 / -1;
 }
 
+.zt-literature-report-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-2);
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  padding-top: var(--size-4-1);
+}
+
 .zt-literature-report-field label,
 .zt-literature-report-field-wide label,
 .zt-literature-report-preview label {
@@ -1025,9 +1056,11 @@ h3.zt-settings-section-title {
 
 .zt-literature-report-action-bar {
   align-items: center;
+  border-top: 1px solid var(--background-modifier-border);
   display: flex;
   gap: var(--size-4-3);
   justify-content: space-between;
+  padding-top: var(--size-4-2);
 }
 
 .zt-literature-report-status {
@@ -1042,6 +1075,7 @@ h3.zt-settings-section-title {
   justify-content: flex-end;
 }
 
+.zt-literature-report-prompt-actions button,
 .zt-literature-report-buttons button {
   border-radius: var(--radius-s);
   box-shadow: none;

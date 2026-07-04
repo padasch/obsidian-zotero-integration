@@ -2,10 +2,7 @@ import React, { ChangeEvent } from 'react';
 
 import { ExportFormat } from '../types';
 import { Icon } from './Icon';
-import {
-  openCSLStylePicker,
-  openMarkdownFilePicker,
-} from './select.helpers';
+import { openCSLStylePicker, openMarkdownFilePicker } from './select.helpers';
 
 interface FormatSettingsProps {
   format: ExportFormat;
@@ -20,7 +17,9 @@ export function ExportFormatSettings({
   updateFormat,
   removeFormat,
 }: FormatSettingsProps) {
-  const [templatePath, setTemplatePath] = React.useState(format.templatePath || '');
+  const [templatePath, setTemplatePath] = React.useState(
+    format.templatePath || ''
+  );
   const [cslStyle, setCslStyle] = React.useState(format.cslStyle || '');
 
   React.useEffect(() => {
@@ -100,6 +99,9 @@ export function ExportFormatSettings({
             </button>
           </div>
         </div>
+        <div className="zt-format__input-note">
+          Command name shown in Obsidian for this import format.
+        </div>
       </div>
 
       <div className="zt-format__form">
@@ -114,9 +116,9 @@ export function ExportFormatSettings({
         </div>
         <div className="zt-format__input-note">
           The path for new markdown files. Supports templating, eg{' '}
-          <pre>My Folder/@{'{{citekey}}'}.md</pre>. If this is only a file
-          name, Note Import Location is prepended. Updates of existing notes keep
-          the current note path.
+          <pre>My Folder/@{'{{citekey}}'}.md</pre>. If this is only a file name,
+          Note Import Location is prepended. Updates of existing notes keep the
+          current note path.
         </div>
       </div>
 
@@ -131,8 +133,8 @@ export function ExportFormatSettings({
           />
         </div>
         <div className="zt-format__input-note">
-          Folder for exported annotation images. Relative paths are resolved from
-          the final note folder. Use <pre>images/</pre> for a shared images
+          Folder for exported annotation images. Relative paths are resolved
+          from the final note folder. Use <pre>images/</pre> for a shared images
           folder beside the note; single folder names are placed below{' '}
           <pre>images/</pre>.
         </div>
@@ -176,10 +178,11 @@ export function ExportFormatSettings({
         </div>
         <div className="zt-format__input-note">
           Optional. Leave blank to use the built-in Literature Note template.
-          Choose a markdown file only if you want to fully control the
-          generated note body. Custom templates can use <pre>{'{% persist %}'}</pre>{' '}
+          Choose a markdown file only if you want to fully control the generated
+          note body. Custom templates can use <pre>{'{% persist %}'}</pre>{' '}
           blocks for sections that should survive updates. Use the Test import
-          template command to inspect available data. Templates are written using{' '}
+          template command to inspect available data. Templates are written
+          using{' '}
           <a
             href="https://mozilla.github.io/nunjucks/templating.html#variables"
             target="_blank"
@@ -317,7 +320,8 @@ export function ExportFormatSettings({
           </button>
         </div>
         <div className="zt-format__input-note">
-          Note, the chosen style must be installed in Zotero. See{' '}
+          CSL style used for rendered bibliographies; it must be installed in
+          Zotero. See{' '}
           <a
             target="_blank"
             href="https://www.zotero.org/support/styles"

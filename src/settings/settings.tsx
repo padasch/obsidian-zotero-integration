@@ -1,9 +1,15 @@
-import { App, Notice, PluginSettingTab, debounce } from 'obsidian';
+import {
+  App,
+  FuzzySuggestModal,
+  Notice,
+  PluginSettingTab,
+  debounce,
+  request,
+} from 'obsidian';
 import React from 'react';
 import ReactDOM from 'react-dom';
 import which from 'which';
 
-import ZoteroConnector from '../main';
 import {
   DEFAULT_LITERATURE_REPORT_FOLDER,
   DEFAULT_LITERATURE_REPORT_LANGUAGE,
@@ -12,15 +18,16 @@ import {
   DEFAULT_LITERATURE_REPORT_PROMPT,
 } from '../LiteratureEvidenceMap';
 import {
-  ZOTERO_ANNOTATION_COLORS,
-  ZOTERO_ANNOTATION_COLOR_HEX,
-} from '../ZoteroManagedProperties';
-import {
   getInvalidZoteroItemTableColumns,
   getZoteroItemTableColumnHelp,
   normalizeZoteroItemTableColumns,
 } from '../ZoteroItemTable.columns';
+import {
+  ZOTERO_ANNOTATION_COLORS,
+  ZOTERO_ANNOTATION_COLOR_HEX,
+} from '../ZoteroManagedProperties';
 import { formatScopeInput, splitScopeInput } from '../ZoteroMonitor.helpers';
+import ZoteroConnector from '../main';
 import {
   CitationFormat,
   ExportFormat,
@@ -76,6 +83,79 @@ function getVaultPropertyKeys(app: App): Set<string> {
   return keys;
 }
 
+function normalizeLiteratureReportOllamaBaseUrl(value: string): string {
+  return (value || DEFAULT_LITERATURE_REPORT_OLLAMA_URL).replace(/\/+$/, '');
+}
+
+function normalizeOllamaModelName(value: string): string {
+  return value.trim().replace(/:latest$/i, '');
+}
+
+function getOllamaModelNames(value: unknown): string[] {
+  if (!value || typeof value !== 'object') return [];
+
+  const models = (value as { models?: unknown }).models;
+  if (!Array.isArray(models)) return [];
+
+  const names = models.flatMap((model) => {
+    if (!model || typeof model !== 'object') return [];
+
+    const record = model as { name?: unknown; model?: unknown };
+    return [record.name, record.model]
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  });
+
+  return Array.from(new Set(names)).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  );
+}
+
+async function requestOllamaModelNames(baseUrl: string): Promise<string[]> {
+  const responseText = await request({
+    method: 'GET',
+    url: `${normalizeLiteratureReportOllamaBaseUrl(baseUrl)}/api/tags`,
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  let response: unknown;
+  try {
+    response = JSON.parse(responseText);
+  } catch {
+    throw new Error('Ollama returned a response that was not valid JSON.');
+  }
+
+  return getOllamaModelNames(response);
+}
+
+class OllamaModelSelectModal extends FuzzySuggestModal<string> {
+  constructor(
+    app: App,
+    private models: string[],
+    private onChooseModel: (model: string) => void | Promise<void>
+  ) {
+    super(app);
+    this.emptyStateText = 'No installed Ollama models found.';
+    this.setPlaceholder('Choose an installed Ollama model');
+  }
+
+  getItems(): string[] {
+    return this.models;
+  }
+
+  getItemText(model: string): string {
+    return model;
+  }
+
+  onChooseItem(model: string): void {
+    void this.onChooseModel(model);
+    this.close();
+  }
+}
+
 function SettingsDivider() {
   return <hr className="zt-settings-divider" />;
 }
@@ -101,7 +181,7 @@ function SettingsSection({
   title,
   description,
   children,
-  collapsible,
+  collapsible = true,
   defaultOpen = true,
   level = 2,
 }: React.PropsWithChildren<{
@@ -159,7 +239,8 @@ function ValidationWarning({
 
   return (
     <div className="zt-settings-warning">
-      {label}: {values.map((value) => (
+      {label}:{' '}
+      {values.map((value) => (
         <code key={value}>{value}</code>
       ))}
     </div>
@@ -212,22 +293,34 @@ function SettingsComponent({
     React.useState(() =>
       formatLineInput(
         normalizeZoteroItemTableColumns(
-          settings.zoteroItemTableColumns ||
-            settings.zoteroMonitorTableColumns
+          settings.zoteroItemTableColumns || settings.zoteroMonitorTableColumns
         )
       )
     );
 
-  const [preservedPropertiesText, setPreservedPropertiesText] =
-    React.useState(() => formatLineInput(settings.zoteroPreservedProperties));
+  const [preservedPropertiesText, setPreservedPropertiesText] = React.useState(
+    () => formatLineInput(settings.zoteroPreservedProperties)
+  );
   const [literatureReportFolder, setLiteratureReportFolder] = React.useState(
-    settings.zoteroLiteratureReportFolder ||
-      DEFAULT_LITERATURE_REPORT_FOLDER
+    settings.zoteroLiteratureReportFolder || DEFAULT_LITERATURE_REPORT_FOLDER
   );
   const [literatureReportPrompt, setLiteratureReportPrompt] = React.useState(
-    settings.zoteroLiteratureReportPrompt ||
-      DEFAULT_LITERATURE_REPORT_PROMPT
+    settings.zoteroLiteratureReportPrompt || DEFAULT_LITERATURE_REPORT_PROMPT
   );
+  const [literatureReportOllamaUrl, setLiteratureReportOllamaUrl] =
+    React.useState(
+      settings.zoteroLiteratureReportOllamaUrl ||
+        DEFAULT_LITERATURE_REPORT_OLLAMA_URL
+    );
+  const [literatureReportModel, setLiteratureReportModel] = React.useState(
+    settings.zoteroLiteratureReportModel || DEFAULT_LITERATURE_REPORT_MODEL
+  );
+  const [ollamaModels, setOllamaModels] = React.useState<string[]>([]);
+  const [ollamaModelStatus, setOllamaModelStatus] = React.useState(
+    'Refresh models to list installed local Ollama models.'
+  );
+  const [isRefreshingOllamaModels, setIsRefreshingOllamaModels] =
+    React.useState(false);
 
   const [taskAnnotationColors, setTaskAnnotationColors] = React.useState(
     settings.zoteroTaskAnnotationColors || []
@@ -335,15 +428,13 @@ function SettingsComponent({
     () => splitLineInput(preservedPropertiesText),
     [preservedPropertiesText]
   );
-  const availablePropertyKeys = React.useMemo(() => getVaultPropertyKeys(app), [
-    app,
-  ]);
+  const availablePropertyKeys = React.useMemo(
+    () => getVaultPropertyKeys(app),
+    [app]
+  );
   const invalidPreservedProperties = React.useMemo(
     () =>
-      getInvalidPreservedProperties(
-        preservedProperties,
-        availablePropertyKeys
-      ),
+      getInvalidPreservedProperties(preservedProperties, availablePropertyKeys),
     [availablePropertyKeys, preservedProperties]
   );
   const onChangeLiteratureReportFolder = React.useCallback(
@@ -353,6 +444,89 @@ function SettingsComponent({
     },
     [updateSetting]
   );
+  const onChangeLiteratureReportOllamaUrl = React.useCallback(
+    (value: string) => {
+      const next = value.trim();
+      setLiteratureReportOllamaUrl(next);
+      setOllamaModels([]);
+      setOllamaModelStatus(
+        'Refresh models to list installed local Ollama models.'
+      );
+      updateSetting('zoteroLiteratureReportOllamaUrl', next);
+    },
+    [updateSetting]
+  );
+  const onChangeLiteratureReportModel = React.useCallback(
+    (value: string) => {
+      const next = value.trim();
+      setLiteratureReportModel(next);
+      updateSetting('zoteroLiteratureReportModel', next);
+    },
+    [updateSetting]
+  );
+  const refreshLiteratureReportModels = React.useCallback(
+    async (showNotice = true): Promise<string[]> => {
+      setIsRefreshingOllamaModels(true);
+      setOllamaModelStatus('Scanning installed local Ollama models...');
+
+      try {
+        const models = await requestOllamaModelNames(literatureReportOllamaUrl);
+        setOllamaModels(models);
+
+        if (!models.length) {
+          setOllamaModelStatus('No installed Ollama models were returned.');
+          if (showNotice) new Notice('No local Ollama models were found.');
+          return [];
+        }
+
+        const hasSelectedModel = models.some(
+          (model) =>
+            normalizeOllamaModelName(model) ===
+            normalizeOllamaModelName(literatureReportModel)
+        );
+        const selectedText = hasSelectedModel
+          ? `Selected model is installed: ${literatureReportModel}.`
+          : `Selected model is not in the detected list: ${literatureReportModel}.`;
+        setOllamaModelStatus(
+          `${selectedText} Detected ${models.length}: ${models.join(', ')}`
+        );
+        if (showNotice) new Notice('Local Ollama models refreshed.');
+        return models;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Could not reach Ollama.';
+        setOllamaModels([]);
+        setOllamaModelStatus(`Could not read local Ollama models: ${message}`);
+        if (showNotice)
+          new Notice(`Could not read local Ollama models: ${message}`);
+        return [];
+      } finally {
+        setIsRefreshingOllamaModels(false);
+      }
+    },
+    [literatureReportModel, literatureReportOllamaUrl]
+  );
+  const chooseLiteratureReportModel = React.useCallback(async () => {
+    const models = ollamaModels.length
+      ? ollamaModels
+      : await refreshLiteratureReportModels(false);
+
+    if (!models.length) {
+      new Notice('Refresh local Ollama models before choosing one.');
+      return;
+    }
+
+    new OllamaModelSelectModal(
+      app,
+      models,
+      onChangeLiteratureReportModel
+    ).open();
+  }, [
+    app,
+    ollamaModels,
+    onChangeLiteratureReportModel,
+    refreshLiteratureReportModels,
+  ]);
 
   return (
     <div className="zt-settings-root">
@@ -561,15 +735,12 @@ function SettingsComponent({
               onChange={(e) => {
                 const value = (e.target as HTMLTextAreaElement).value;
                 setZoteroItemTableColumnsText(value);
-                updateSetting(
-                  'zoteroItemTableColumns',
-                  splitLineInput(value)
-                );
+                updateSetting('zoteroItemTableColumns', splitLineInput(value));
               }}
             />
             <p className="zt-settings-field-note">
-              Supported keys: {getZoteroItemTableColumnHelp()}. Aliases:
-              journal uses publication, type uses itemType.
+              Supported keys: {getZoteroItemTableColumnHelp()}. Aliases: journal
+              uses publication, type uses itemType.
             </p>
             <ValidationWarning
               label="Unknown table columns"
@@ -740,7 +911,10 @@ function SettingsComponent({
             ))}
           </select>
         </SettingItem>
-        <SettingItem name="Check Zotero now">
+        <SettingItem
+          name="Check Zotero now"
+          description="Run a manual missing-reference check using the monitor settings above."
+        >
           <button onClick={runZoteroMonitorCheck}>Check now</button>
         </SettingItem>
       </SettingsSection>
@@ -904,36 +1078,63 @@ function SettingsComponent({
           <input
             type="text"
             spellCheck={false}
-            defaultValue={
-              settings.zoteroLiteratureReportOllamaUrl ||
-              DEFAULT_LITERATURE_REPORT_OLLAMA_URL
-            }
-            onChange={(e) =>
-              updateSetting(
-                'zoteroLiteratureReportOllamaUrl',
-                (e.target as HTMLInputElement).value.trim()
+            value={literatureReportOllamaUrl}
+            onInput={(e) =>
+              onChangeLiteratureReportOllamaUrl(
+                (e.target as HTMLInputElement).value
               )
             }
           />
         </SettingItem>
         <SettingItem
           name="Ollama model"
-          description="Local model used for literature synthesis."
+          description="Local model used for literature synthesis; refresh installed models to choose one."
         >
-          <input
-            type="text"
-            spellCheck={false}
-            defaultValue={
-              settings.zoteroLiteratureReportModel ||
-              DEFAULT_LITERATURE_REPORT_MODEL
-            }
-            onChange={(e) =>
-              updateSetting(
-                'zoteroLiteratureReportModel',
-                (e.target as HTMLInputElement).value.trim()
-              )
-            }
-          />
+          <div className="zt-ollama-model-field">
+            <div className="zt-ollama-model-control">
+              <input
+                type="text"
+                spellCheck={false}
+                value={literatureReportModel}
+                onInput={(e) =>
+                  onChangeLiteratureReportModel(
+                    (e.target as HTMLInputElement).value
+                  )
+                }
+              />
+              <button
+                type="button"
+                disabled={isRefreshingOllamaModels}
+                onClick={chooseLiteratureReportModel}
+              >
+                Choose installed model
+              </button>
+              <button
+                type="button"
+                disabled={isRefreshingOllamaModels}
+                onClick={() => {
+                  void refreshLiteratureReportModels();
+                }}
+              >
+                {isRefreshingOllamaModels ? 'Refreshing...' : 'Refresh models'}
+              </button>
+            </div>
+            <p className="zt-settings-field-note">{ollamaModelStatus}</p>
+          </div>
+        </SettingItem>
+        <SettingItem
+          name="Ollama model status"
+          description="Check whether the configured local Ollama URL is reachable and returns installed models."
+        >
+          <button
+            type="button"
+            disabled={isRefreshingOllamaModels}
+            onClick={() => {
+              void refreshLiteratureReportModels();
+            }}
+          >
+            Check Ollama
+          </button>
         </SettingItem>
         <SettingItem
           name="Report language"
@@ -975,8 +1176,8 @@ function SettingsComponent({
               }}
             />
             <p className="zt-settings-field-note">
-              Context can guide relevance, but the renderer omits AI claims
-              that do not cite valid evidence IDs extracted from local notes.
+              Context can guide relevance, but the renderer omits AI claims that
+              do not cite valid evidence IDs extracted from local notes.
             </p>
             <button
               type="button"
@@ -1000,7 +1201,10 @@ function SettingsComponent({
         title="Citation formats"
         description="Commands that insert formatted citations or rendered citation templates."
       >
-        <SettingItem className="zt-setting-item-actions">
+        <SettingItem
+          name="Add citation format"
+          description="Create another command for inserting citations, bibliographies, or citation templates."
+        >
           <button onClick={addCite} className="mod-cta">
             Add Citation Format
           </button>
@@ -1024,7 +1228,10 @@ function SettingsComponent({
         title="Import formats"
         description="Templates and output paths used by Zotero import commands."
       >
-        <SettingItem className="zt-setting-item-actions">
+        <SettingItem
+          name="Add import format"
+          description="Create another Zotero import command with its own output paths and template."
+        >
           <button onClick={addExport} className="mod-cta">
             Add Import Format
           </button>
@@ -1050,7 +1257,10 @@ function SettingsComponent({
         collapsible
         defaultOpen={false}
       >
-        <SettingItem name="Image Format">
+        <SettingItem
+          name="Image Format"
+          description="File format used when rectangle annotations are exported as images."
+        >
           <select
             className="dropdown"
             defaultValue={settings.pdfExportImageFormat}
@@ -1065,7 +1275,10 @@ function SettingsComponent({
             <option value="png">png</option>
           </select>
         </SettingItem>
-        <SettingItem name="Image Quality (jpg only)">
+        <SettingItem
+          name="Image Quality (jpg only)"
+          description="JPEG quality for exported annotation images, from 0 to 100."
+        >
           <input
             min="0"
             max="100"
@@ -1079,7 +1292,10 @@ function SettingsComponent({
             defaultValue={settings.pdfExportImageQuality.toString()}
           />
         </SettingItem>
-        <SettingItem name="Image DPI">
+        <SettingItem
+          name="Image DPI"
+          description="Resolution used when rendering rectangle annotations from PDFs."
+        >
           <input
             min="0"
             onChange={(e) =>
@@ -1094,20 +1310,7 @@ function SettingsComponent({
         </SettingItem>
         <SettingItem
           name="Image OCR"
-          description={
-            <div>
-              Attempt to extract text from images created by rectangle
-              annotations. This requires that{' '}
-              <a
-                href="https://tesseract-ocr.github.io/tessdoc/"
-                target="_blank"
-                rel="noreferrer"
-              >
-                tesseract
-              </a>{' '}
-              be installed on your system.
-            </div>
-          }
+          description="Attempt text extraction from rectangle annotation images using local Tesseract."
         >
           <div
             onClick={() =>
@@ -1121,13 +1324,7 @@ function SettingsComponent({
         </SettingItem>
         <SettingItem
           name="Tesseract path"
-          description={
-            <div>
-              Required: An absolute path to the tesseract executable. This can
-              be found on mac and linux with the terminal command{' '}
-              <pre>which tesseract</pre>
-            </div>
-          }
+          description="Absolute path to the local tesseract executable used for OCR."
         >
           <input
             ref={tessPathRef}
@@ -1167,12 +1364,7 @@ function SettingsComponent({
         </SettingItem>
         <SettingItem
           name="Image OCR Language"
-          description={
-            <div>
-              Optional: defaults to english. Multiple languages can be specified
-              like so: <pre>eng+deu</pre>.
-            </div>
-          }
+          description="Tesseract language code for OCR; combine languages with plus signs such as eng+deu."
         >
           <input
             onChange={(e) =>
@@ -1204,9 +1396,11 @@ function SettingsComponent({
             className="clickable-icon setting-editor-extra-setting-button"
             aria-label="Select the tesseract data directory"
             onClick={() => {
-              const path = require('electron').remote.dialog.showOpenDialogSync({
-                properties: ['openDirectory'],
-              });
+              const path = require('electron').remote.dialog.showOpenDialogSync(
+                {
+                  properties: ['openDirectory'],
+                }
+              );
 
               if (path && path.length) {
                 tessDataPathRef.current.value = path[0];

@@ -8,7 +8,6 @@ import {
   setIcon,
 } from 'obsidian';
 
-import type ZoteroConnector from './main';
 import {
   DEFAULT_LITERATURE_REPORT_FOLDER,
   DEFAULT_LITERATURE_REPORT_LANGUAGE,
@@ -37,6 +36,7 @@ import {
 } from './LiteratureEvidenceMap';
 import { mkMDDir, sanitizeFilePath } from './bbt/helpers';
 import { removeStartingSlash } from './bbt/template.helpers';
+import type ZoteroConnector from './main';
 import { openMarkdownOrBaseFilePicker } from './settings/select.helpers';
 
 type ScopeValuesByProperty = Record<LiteratureReportScopeProperty, string[]>;
@@ -61,8 +61,9 @@ function normalizeOllamaBaseUrl(value: string): string {
 }
 
 function corpusPreview(corpus: LiteratureReportCorpus): string {
-  const abstracts = corpus.evidence.filter((item) => item.kind === 'abstract')
-    .length;
+  const abstracts = corpus.evidence.filter(
+    (item) => item.kind === 'abstract'
+  ).length;
   const annotations = corpus.evidence.filter(
     (item) => item.kind === 'annotation'
   ).length;
@@ -204,46 +205,6 @@ class LiteratureEvidenceMapModal extends Modal {
     this.renderContextControls(controls);
     this.renderPromptControls(controls);
 
-    const actionBar = container.createDiv('zt-literature-report-action-bar');
-    this.statusEl = actionBar.createDiv('zt-literature-report-status');
-    const buttons = actionBar.createDiv('zt-literature-report-buttons');
-
-    const cancelButton = buttons.createEl('button', { text: 'Cancel' });
-    cancelButton.type = 'button';
-    cancelButton.addEventListener('click', () => this.close());
-
-    this.generatePromptButton = buttons.createEl('button', {
-      text: 'Generate synthesis prompt',
-    });
-    this.generatePromptButton.type = 'button';
-    this.generatePromptButton.addEventListener('click', () => {
-      this.generateSynthesisPrompt();
-    });
-
-    this.revisePromptButton = buttons.createEl('button', {
-      text: 'Revise synthesis prompt',
-    });
-    this.revisePromptButton.type = 'button';
-    this.revisePromptButton.addEventListener('click', () => {
-      this.reviseSynthesisPrompt();
-    });
-
-    this.generateButton = buttons.createEl('button', {
-      text: 'Generate synthesis report',
-    });
-    this.generateButton.type = 'button';
-    this.generateButton.addClass('mod-cta');
-    this.generateButton.addEventListener('click', () => {
-      this.generatePreview();
-    });
-
-    this.saveButton = buttons.createEl('button', { text: 'Save report' });
-    this.saveButton.type = 'button';
-    this.saveButton.disabled = true;
-    this.saveButton.addEventListener('click', () => {
-      this.saveReport();
-    });
-
     const previewField = container.createDiv('zt-literature-report-preview');
     previewField.createEl('label', { text: 'Markdown preview' });
     this.previewEl = previewField.createEl('textarea');
@@ -252,6 +213,30 @@ class LiteratureEvidenceMapModal extends Modal {
     this.previewEl.addEventListener('input', () => {
       this.reportMarkdown = this.previewEl.value;
       this.saveButton.disabled = !this.reportMarkdown.trim();
+    });
+
+    const actionBar = container.createDiv('zt-literature-report-action-bar');
+    this.statusEl = actionBar.createDiv('zt-literature-report-status');
+    const buttons = actionBar.createDiv('zt-literature-report-buttons');
+
+    const cancelButton = buttons.createEl('button', { text: 'Cancel' });
+    cancelButton.type = 'button';
+    cancelButton.addEventListener('click', () => this.close());
+
+    this.generateButton = buttons.createEl('button', {
+      text: 'Generate synthesis report',
+    });
+    this.generateButton.type = 'button';
+    this.generateButton.addClass('mod-cta');
+    this.generateButton.addEventListener('click', () => {
+      void this.generatePreview();
+    });
+
+    this.saveButton = buttons.createEl('button', { text: 'Save report' });
+    this.saveButton.type = 'button';
+    this.saveButton.disabled = true;
+    this.saveButton.addEventListener('click', () => {
+      void this.saveReport();
     });
 
     this.updateStatus();
@@ -320,7 +305,9 @@ class LiteratureEvidenceMapModal extends Modal {
   }
 
   private renderContextControls(container: HTMLDivElement) {
-    const contextFileField = container.createDiv('zt-literature-report-field-wide');
+    const contextFileField = container.createDiv(
+      'zt-literature-report-field-wide'
+    );
     contextFileField.createEl('label', { text: 'Reference context file' });
     const picker = contextFileField.createDiv('zt-picker-field');
     this.contextFileEl = picker.createEl('input');
@@ -364,12 +351,33 @@ class LiteratureEvidenceMapModal extends Modal {
       DEFAULT_LITERATURE_REPORT_PROMPT;
     this.synthesisPromptEl.addEventListener('input', () => this.clearPreview());
 
-    const revisionField = container.createDiv('zt-literature-report-field-wide');
+    const revisionField = container.createDiv(
+      'zt-literature-report-field-wide'
+    );
     revisionField.createEl('label', { text: 'Prompt revision instruction' });
     this.revisionInstructionEl = revisionField.createEl('textarea');
     this.revisionInstructionEl.rows = 2;
     this.revisionInstructionEl.placeholder =
       'Optional: explain how the synthesis prompt should be revised.';
+
+    const promptActions = container.createDiv(
+      'zt-literature-report-prompt-actions'
+    );
+    this.generatePromptButton = promptActions.createEl('button', {
+      text: 'Generate synthesis prompt',
+    });
+    this.generatePromptButton.type = 'button';
+    this.generatePromptButton.addEventListener('click', () => {
+      void this.generateSynthesisPrompt();
+    });
+
+    this.revisePromptButton = promptActions.createEl('button', {
+      text: 'Revise synthesis prompt',
+    });
+    this.revisePromptButton.type = 'button';
+    this.revisePromptButton.addEventListener('click', () => {
+      void this.reviseSynthesisPrompt();
+    });
   }
 
   private renderScopeValueOptions() {
@@ -409,7 +417,8 @@ class LiteratureEvidenceMapModal extends Modal {
     const records: LiteratureReportNoteRecord[] = [];
 
     for (const file of files) {
-      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      const frontmatter =
+        this.app.metadataCache.getFileCache(file)?.frontmatter;
       if (!frontmatter) continue;
 
       const markdown = await this.app.vault.cachedRead(file);
@@ -460,6 +469,12 @@ class LiteratureEvidenceMapModal extends Modal {
     );
   }
 
+  private async yieldToUi(): Promise<void> {
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  }
+
   private async generateSynthesisPrompt() {
     if (!this.scopeValue) {
       this.setStatus('Choose a project or topic value first.');
@@ -467,9 +482,11 @@ class LiteratureEvidenceMapModal extends Modal {
     }
 
     this.setBusy(true);
+    this.generatePromptButton.textContent = 'Generating prompt...';
     this.setStatus('Reading literature notes and context...');
 
     try {
+      await this.yieldToUi();
       const corpus = await this.loadCorpus();
       if (!corpus.sources.length) {
         this.setStatus('No matching Zotero literature notes found.');
@@ -484,18 +501,23 @@ class LiteratureEvidenceMapModal extends Modal {
         model: this.model(),
         mode: this.getMode(),
       });
-      this.setStatus(`Generating synthesis prompt from ${corpusPreview(corpus)}...`);
+      this.setStatus(
+        `Generating synthesis prompt from ${corpusPreview(corpus)}...`
+      );
       const content = await requestOllamaContent(
         this.plugin.settings,
         requestBody,
         'Ollama returned an empty synthesis-prompt response.'
       );
       const prompt = parseAiSynthesisPromptContent(content);
-      if (!prompt) throw new Error('Ollama returned an empty synthesis prompt.');
+      if (!prompt)
+        throw new Error('Ollama returned an empty synthesis prompt.');
 
       this.synthesisPromptEl.value = prompt;
       this.clearPreview();
-      this.setStatus('Synthesis prompt generated. Review or revise it before generating the report.');
+      this.setStatus(
+        'Synthesis prompt generated. Review or revise it before generating the report.'
+      );
     } catch (error) {
       console.error(error);
       this.setStatus(
@@ -505,6 +527,7 @@ class LiteratureEvidenceMapModal extends Modal {
       );
       new Notice('Failed to generate synthesis prompt.', 10000);
     } finally {
+      this.generatePromptButton.textContent = 'Generate synthesis prompt';
       this.setBusy(false);
     }
   }
@@ -517,9 +540,11 @@ class LiteratureEvidenceMapModal extends Modal {
     }
 
     this.setBusy(true);
+    this.revisePromptButton.textContent = 'Revising prompt...';
     this.setStatus('Revising synthesis prompt...');
 
     try {
+      await this.yieldToUi();
       const corpus = await this.loadCorpus();
       if (!corpus.sources.length) {
         this.setStatus('No matching Zotero literature notes found.');
@@ -550,7 +575,9 @@ class LiteratureEvidenceMapModal extends Modal {
 
       this.synthesisPromptEl.value = prompt;
       this.clearPreview();
-      this.setStatus('Synthesis prompt revised. Review it before generating the report.');
+      this.setStatus(
+        'Synthesis prompt revised. Review it before generating the report.'
+      );
     } catch (error) {
       console.error(error);
       this.setStatus(
@@ -560,6 +587,7 @@ class LiteratureEvidenceMapModal extends Modal {
       );
       new Notice('Failed to revise synthesis prompt.', 10000);
     } finally {
+      this.revisePromptButton.textContent = 'Revise synthesis prompt';
       this.setBusy(false);
     }
   }
@@ -571,9 +599,11 @@ class LiteratureEvidenceMapModal extends Modal {
     }
 
     this.setBusy(true);
+    this.generateButton.textContent = 'Generating report...';
     this.setStatus('Reading literature notes...');
 
     try {
+      await this.yieldToUi();
       const corpus = await this.loadCorpus();
       if (!corpus.sources.length) {
         this.setStatus('No matching Zotero literature notes found.');
@@ -592,7 +622,9 @@ class LiteratureEvidenceMapModal extends Modal {
       const synthesisPrompt =
         this.synthesisPromptEl.value.trim() || DEFAULT_LITERATURE_REPORT_PROMPT;
 
-      this.setStatus(`Scope preview: ${corpusPreview(corpus)}. Running relevance triage...`);
+      this.setStatus(
+        `Scope preview: ${corpusPreview(corpus)}. Running relevance triage...`
+      );
       const triageContent = await requestOllamaContent(
         this.plugin.settings,
         buildOllamaLiteratureTriageRequest({
@@ -671,6 +703,7 @@ class LiteratureEvidenceMapModal extends Modal {
       );
       new Notice('Failed to generate literature synthesis report.', 10000);
     } finally {
+      this.generateButton.textContent = 'Generate synthesis report';
       this.setBusy(false);
     }
   }
@@ -680,9 +713,11 @@ class LiteratureEvidenceMapModal extends Modal {
     if (!markdown) return;
 
     this.setBusy(true);
+    this.saveButton.textContent = 'Saving report...';
     this.setStatus('Saving report...');
 
     try {
+      await this.yieldToUi();
       const path = await getUniqueReportPath(
         this.app,
         this.plugin.settings.zoteroLiteratureReportFolder ||
@@ -706,6 +741,7 @@ class LiteratureEvidenceMapModal extends Modal {
       );
       new Notice('Failed to save literature synthesis report.', 10000);
     } finally {
+      this.saveButton.textContent = 'Save report';
       this.setBusy(false);
     }
   }
@@ -737,7 +773,9 @@ class LiteratureEvidenceMapModal extends Modal {
   private updateStatus() {
     const values = this.scopeValues[this.scopeProperty] || [];
     if (!values.length) {
-      this.setStatus(`No ${this.scopeProperty} values found in literature notes.`);
+      this.setStatus(
+        `No ${this.scopeProperty} values found in literature notes.`
+      );
       return;
     }
 

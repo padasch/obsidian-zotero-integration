@@ -123,6 +123,9 @@ export function CiteFormatSettings({
             </button>
           </div>
         </div>
+        <div className="zt-format__input-note">
+          Command name shown in Obsidian for this citation format.
+        </div>
       </div>
 
       <div className="zt-format__form">
@@ -142,6 +145,10 @@ export function CiteFormatSettings({
             </option>
             <option value="template">Template</option>
           </select>
+        </div>
+        <div className="zt-format__input-note">
+          Controls whether the command inserts LaTeX, BibLaTeX, Pandoc,
+          CSL-rendered text, or a template.
         </div>
       </div>
 
@@ -229,6 +236,9 @@ export function CiteFormatSettings({
               onChange={onChangeCommand}
             />
           </div>
+          <div className="zt-format__input-note">
+            LaTeX or BibLaTeX command name used before the citekey.
+          </div>
         </div>
       )}
 
@@ -242,6 +252,9 @@ export function CiteFormatSettings({
                 format.brackets ? ' is-enabled' : ''
               }`}
             />
+          </div>
+          <div className="zt-format__input-note">
+            Wrap Pandoc citations in square brackets.
           </div>
         </div>
       )}
