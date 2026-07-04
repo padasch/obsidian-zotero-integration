@@ -369,7 +369,7 @@ describe('renderLiteratureSynthesisReport()', () => {
     expect(markdown).toContain('zoteroReportContextFile: "Projects/Context.md"');
     expect(markdown).toContain('zoteroReportPastedContextUsed: true');
     expect(markdown).not.toContain('zoteroLiteratureReport: true');
-    expect(markdown).toContain('> [!info]- Inputs used');
+    expect(markdown).toContain('> [!info]+ Inputs used');
     expect(markdown).toContain('# Literature Synthesis: Drought synthesis');
     expect(markdown).toContain('## Main papers to check in this context');
     expect(markdown).toContain('Forest Ecology');
@@ -447,7 +447,7 @@ describe('renderLiteratureCompilationReport()', () => {
 
     expect(markdown).toContain('zoteroReportType: "literature-compilation"');
     expect(markdown).toContain('# Drought collection');
-    expect(markdown).toContain('> [!info]- Inputs used');
+    expect(markdown).toContain('> [!info]+ Inputs used');
     expect(markdown).toContain('## @smith2026 - Drought paper');
     expect(markdown).toContain('- **Abstract:** Drought abstract evidence.');
     expect(markdown).toContain(

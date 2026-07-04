@@ -1506,7 +1506,7 @@ function renderInputsCalloutCommon(
   pastedContextUsed: boolean
 ): string {
   return [
-    '> [!info]- Inputs used',
+    '> [!info]+ Inputs used',
     `> - Source property: \`${corpus.scopeProperty}\``,
     `> - Source value: \`${corpus.scopeValue}\``,
     `> - Source notes scanned: ${corpus.sources.length}`,

@@ -249,7 +249,7 @@ class LiteratureEvidenceMapModal extends Modal {
       zoteroProject: collectLiteratureScopeValues(records, 'zoteroProject'),
       zoteroTopic: collectLiteratureScopeValues(records, 'zoteroTopic'),
     };
-    this.scopeValue = this.scopeValues[this.scopeProperty][0] || '';
+    this.scopeValue = '';
 
     const container = this.contentEl.createDiv('zt-literature-report-modal');
     const header = container.createDiv('zt-literature-report-header');
@@ -403,7 +403,7 @@ class LiteratureEvidenceMapModal extends Modal {
     propertySelect.addEventListener('change', () => {
       this.scopeProperty =
         propertySelect.value as LiteratureReportScopeProperty;
-      this.scopeValue = this.scopeValues[this.scopeProperty][0] || '';
+      this.scopeValue = '';
       this.renderScopeValueOptions();
       this.clearPreview();
       this.updateStatus();
@@ -579,17 +579,31 @@ class LiteratureEvidenceMapModal extends Modal {
         value: '',
       });
       this.valueSelectEl.disabled = true;
+      this.valueSelectEl.value = '';
       return;
     }
 
     this.valueSelectEl.disabled = false;
+    const placeholderOption = this.valueSelectEl.createEl('option', {
+      text: 'Select a value',
+      value: '',
+    });
+    placeholderOption.disabled = true;
+    placeholderOption.selected = !this.scopeValue;
     for (const value of values) {
       this.valueSelectEl.createEl('option', {
         text: value,
         value,
       });
     }
-    this.valueSelectEl.value = this.scopeValue;
+    if (!this.scopeValue) {
+      this.valueSelectEl.value = '';
+    } else if (!values.includes(this.scopeValue)) {
+      this.scopeValue = '';
+      this.valueSelectEl.value = '';
+    } else {
+      this.valueSelectEl.value = this.scopeValue;
+    }
   }
 
   private getMode(): LiteratureReportMode {
@@ -1117,6 +1131,12 @@ class LiteratureEvidenceMapModal extends Modal {
     if (!values.length) {
       this.setStatus(
         `No ${this.scopeProperty} values found in literature notes.`
+      );
+      return;
+    }
+    if (!this.scopeValue) {
+      this.setStatus(
+        `Select one ${this.scopeProperty} value before generating this report.`
       );
       return;
     }
