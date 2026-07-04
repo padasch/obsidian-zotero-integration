@@ -229,7 +229,7 @@ export default class ZoteroConnector extends Plugin {
 
     this.addCommand({
       id: 'zdc-generate-literature-evidence-map',
-      name: 'Generate literature evidence map',
+      name: 'Generate literature synthesis report',
       callback: () => {
         openLiteratureEvidenceMapModal(this);
       },

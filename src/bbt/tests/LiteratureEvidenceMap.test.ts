@@ -1,9 +1,14 @@
 import {
   buildLiteratureReportCorpus,
-  buildOllamaEvidenceMapRequest,
+  buildLiteratureSynthesisReportFilename,
+  buildOllamaLiteratureSynthesisRequest,
+  buildOllamaLiteratureTriageRequest,
+  buildOllamaSynthesisPromptRequest,
+  buildOllamaSynthesisPromptRevisionRequest,
   frontmatterMatchesScope,
-  renderLiteratureEvidenceMapReport,
-  validateAiEvidenceMap,
+  renderLiteratureSynthesisReport,
+  validateAiLiteratureSynthesis,
+  validateAiLiteratureTriage,
 } from '../../LiteratureEvidenceMap';
 
 describe('frontmatterMatchesScope()', () => {
@@ -33,7 +38,7 @@ describe('frontmatterMatchesScope()', () => {
 });
 
 describe('buildLiteratureReportCorpus()', () => {
-  it('extracts abstract and default annotation evidence from matching notes', () => {
+  it('extracts abstract, annotation, publication, and scite metadata', () => {
     const corpus = buildLiteratureReportCorpus(
       [
         {
@@ -45,9 +50,13 @@ describe('buildLiteratureReportCorpus()', () => {
             zoteroCitekey: 'smith2026',
             zoteroYear: '2026',
             zoteroAuthors: ['Smith, Jane'],
+            zoteroPublication: 'Journal of Tree Water',
             zoteroDOI: '10.1000/example',
             zoteroURL: '[weblink](https://example.com/paper)',
             zoteroURI: '[zotero item](zotero://select/library/items/ABC123)',
+            zoteroReader:
+              '[zotero reader](zotero://open-pdf/library/items/PDF123)',
+            zoteroSciteCitingPublications: 42,
             zoteroAbstract:
               'This abstract includes a comma, and should remain intact.',
           },
@@ -78,13 +87,18 @@ describe('buildLiteratureReportCorpus()', () => {
     );
 
     expect(corpus.sources).toHaveLength(1);
+    expect(corpus.sources[0]).toMatchObject({
+      publication: 'Journal of Tree Water',
+      sciteCitingPublications: 42,
+    });
     expect(corpus.evidence.map((item) => item.id)).toEqual([
       'S1-abstract',
       'S1-annotation-1',
     ]);
-    expect(corpus.evidence[0].text).toContain(
-      'This abstract includes a comma, and should remain intact.'
-    );
+    expect(corpus.evidence[0]).toMatchObject({
+      href: 'zotero://open-pdf/library/items/PDF123?page=1',
+      text: 'This abstract includes a comma, and should remain intact.',
+    });
     expect(corpus.evidence[1]).toMatchObject({
       href: 'zotero://open-pdf/library/items/ABC123?page=3&annotation=XYZ',
       locator: 'Page 3',
@@ -119,8 +133,82 @@ describe('buildLiteratureReportCorpus()', () => {
   });
 });
 
-describe('validateAiEvidenceMap()', () => {
-  const evidence = buildLiteratureReportCorpus(
+describe('buildLiteratureSynthesisReportFilename()', () => {
+  it('uses compact date, synthesis label, and sanitized descriptive text', () => {
+    expect(
+      buildLiteratureSynthesisReportFilename(
+        'Drought: stress / forests?',
+        '[[Project A]]',
+        new Date('2026-07-04T10:00:00.000Z')
+      )
+    ).toBe('20260704 - Zotero Synthesis - Drought stress forests.md');
+  });
+
+  it('falls back to the plain source value when descriptive text is empty', () => {
+    expect(
+      buildLiteratureSynthesisReportFilename(
+        '',
+        '[[Project A|Forest Project]]',
+        new Date('2026-07-04T10:00:00.000Z')
+      )
+    ).toBe('20260704 - Zotero Synthesis - Forest Project.md');
+  });
+});
+
+describe('validateAiLiteratureTriage()', () => {
+  it('applies relevance, evidence, and annotation caps', () => {
+    const corpus = buildLiteratureReportCorpus(
+      [
+        {
+          path: 'Literature/@smith2026.md',
+          basename: '@smith2026',
+          frontmatter: {
+            zoteroProject: '[[Project A]]',
+            zoteroTitle: 'Paper',
+            zoteroSciteCitingPublications: 12,
+            zoteroAbstract: 'Evidence text.',
+          },
+          markdown: [
+            '## All Annotations',
+            ...Array.from({ length: 7 }, (_, index) =>
+              [
+                `> [!annotation-yellow] Page ${index + 1} ([Ref](zotero://open-pdf/library/items/ABC123?page=${index + 1}&annotation=A${index + 1}))`,
+                `> Annotation ${index + 1}.`,
+              ].join('\n')
+            ),
+          ].join('\n'),
+        },
+      ],
+      'zoteroProject',
+      '[[Project A]]'
+    );
+
+    const result = validateAiLiteratureTriage(
+      {
+        selectedSources: [
+          {
+            sourceId: 'S1',
+            relevanceScore: 0.9,
+            reason: 'Relevant drought evidence.',
+            theme: 'Drought',
+            evidenceIds: corpus.evidence.map((item) => item.id),
+          },
+        ],
+      },
+      corpus,
+      'standard'
+    );
+
+    expect(result.selectedEvidenceIds).toHaveLength(6);
+    expect(result.selectedEvidenceIds).toContain('S1-abstract');
+    expect(
+      result.selectedEvidenceIds.filter((id) => id.includes('annotation'))
+    ).toHaveLength(5);
+  });
+});
+
+describe('validateAiLiteratureSynthesis()', () => {
+  const corpus = buildLiteratureReportCorpus(
     [
       {
         path: 'Literature/@smith2026.md',
@@ -134,12 +222,12 @@ describe('validateAiEvidenceMap()', () => {
     ],
     'zoteroProject',
     '[[Project A]]'
-  ).evidence;
+  );
 
-  it('omits claims with unresolved evidence ids', () => {
-    const result = validateAiEvidenceMap(
+  it('omits uncited claims and claims with unresolved evidence ids', () => {
+    const result = validateAiLiteratureSynthesis(
       {
-        title: 'Drought Map',
+        title: 'Drought synthesis',
         themes: [
           {
             title: 'Water stress',
@@ -152,21 +240,27 @@ describe('validateAiEvidenceMap()', () => {
                 claim: 'This claim cites a missing record.',
                 evidenceIds: ['missing-id'],
               },
+              {
+                claim: 'This claim has no evidence.',
+                evidenceIds: [],
+              },
             ],
           },
         ],
       },
-      evidence
+      corpus.evidence,
+      corpus.sources,
+      'standard'
     );
 
     expect(result.themes).toHaveLength(1);
     expect(result.themes[0].claims).toHaveLength(1);
-    expect(result.omittedClaimCount).toBe(1);
+    expect(result.omittedClaimCount).toBe(2);
   });
 });
 
-describe('renderLiteratureEvidenceMapReport()', () => {
-  it('renders report frontmatter, cited claims, sources, and evidence index', () => {
+describe('renderLiteratureSynthesisReport()', () => {
+  it('renders unified frontmatter, collapsed inputs, bullets, main papers, and footnotes', () => {
     const corpus = buildLiteratureReportCorpus(
       [
         {
@@ -177,82 +271,198 @@ describe('renderLiteratureEvidenceMapReport()', () => {
             zoteroTitle: 'Drought paper',
             citekey: 'smith2026',
             zoteroYear: '2026',
+            zoteroPublication: 'Forest Ecology',
+            zoteroURL: '[weblink](https://example.com/paper)',
+            zoteroSciteCitingPublications: 88,
             zoteroAbstract: 'Drought abstract evidence.',
           },
+          markdown: [
+            '## All Annotations',
+            '> [!annotation-yellow] Page 3 ([Ref](zotero://open-pdf/library/items/PDF123?page=3&annotation=XYZ))',
+            '> Annotation evidence.',
+          ].join('\n'),
         },
       ],
       'zoteroProject',
       '[[Project A]]'
     );
-    const aiMap = validateAiEvidenceMap(
+    const triage = validateAiLiteratureTriage(
+      {
+        selectedSources: [
+          {
+            sourceId: 'S1',
+            relevanceScore: 0.9,
+            reason: 'Central drought-response evidence.',
+            theme: 'Drought response',
+            evidenceIds: ['S1-abstract', 'S1-annotation-1'],
+          },
+        ],
+      },
+      corpus,
+      'standard'
+    );
+    const synthesis = validateAiLiteratureSynthesis(
       {
         title: 'Evidence Map',
+        mainPapers: [
+          {
+            sourceId: 'S1',
+            reason: 'This paper is central for drought-response framing.',
+            evidenceIds: ['S1-abstract'],
+          },
+        ],
         themes: [
           {
             title: 'Drought response',
             claims: [
               {
                 claim: 'The source discusses drought responses.',
-                evidenceIds: ['S1-abstract'],
+                evidenceIds: ['S1-abstract', 'S1-annotation-1'],
               },
             ],
           },
         ],
+        gaps: [
+          {
+            claim: 'The selected evidence leaves management implications underdeveloped.',
+            evidenceIds: ['S1-annotation-1'],
+          },
+        ],
       },
-      corpus.evidence
+      corpus.evidence,
+      corpus.sources,
+      'standard'
     );
-    const markdown = renderLiteratureEvidenceMapReport({
+    const markdown = renderLiteratureSynthesisReport({
       corpus,
-      aiMap,
+      synthesis,
+      triage,
       generatedAt: new Date('2026-07-04T10:00:00.000Z'),
       model: 'llama3.2',
       language: 'English',
+      mode: 'standard',
+      synthesisPrompt: 'Focus on drought stress.',
+      contextFilePath: 'Projects/Context.md',
+      pastedContextUsed: true,
+      reportTitle: 'Drought synthesis',
     });
 
-    expect(markdown).toContain('zoteroLiteratureReport: true');
-    expect(markdown).toContain('zoteroReportSourceCount: 1');
-    expect(markdown).toContain('# Evidence Map: Project A');
+    expect(markdown).toContain('zoteroReport: true');
+    expect(markdown).toContain('zoteroReportType: "literature-synthesis"');
+    expect(markdown).toContain('zoteroReportSourceProperty: "zoteroProject"');
+    expect(markdown).toContain('zoteroReportSourceValue: "[[Project A]]"');
+    expect(markdown).toContain('zoteroReportContextFile: "Projects/Context.md"');
+    expect(markdown).toContain('zoteroReportPastedContextUsed: true');
+    expect(markdown).not.toContain('zoteroLiteratureReport: true');
+    expect(markdown).toContain('> [!info]- Inputs used');
+    expect(markdown).toContain('# Literature Synthesis: Drought synthesis');
+    expect(markdown).toContain('## Main papers to check in this context');
+    expect(markdown).toContain('Forest Ecology');
+    expect(markdown).toContain('scite citations: 88');
+    expect(markdown).not.toContain('supporting');
+    expect(markdown).toContain('## Key Synthesis');
     expect(markdown).toContain(
-      '- The source discusses drought responses. Evidence:'
+      '- The source discusses drought responses.[^E1][^E2]'
     );
-    expect(markdown).toContain('S1-abstract');
-    expect(markdown).toContain('## Sources');
-    expect(markdown).toContain('## Evidence Index');
-    expect(markdown).toContain('Drought abstract evidence.');
+    expect(markdown).toContain('## Gaps And Uncertainties');
+    expect(markdown).toContain('## Source Footnotes');
+    expect(markdown).toContain(
+      '[^E1]: `@smith2026`: [URL](https://example.com/paper), [abstract]'
+    );
+    expect(markdown).toContain('[annotation p. 3]');
+    expect(markdown).toContain('    Excerpt: Drought abstract evidence.');
+    expect(markdown).not.toContain('## Evidence Index');
+    expect(markdown).not.toContain('| ID |');
+    expect(markdown).not.toContain('project context text');
   });
 });
 
-describe('buildOllamaEvidenceMapRequest()', () => {
-  it('includes structured-output schema and compact evidence records', () => {
-    const corpus = buildLiteratureReportCorpus(
-      [
-        {
-          path: 'Literature/@smith2026.md',
-          basename: '@smith2026',
-          frontmatter: {
-            zoteroTopic: 'hydraulics',
-            zoteroTitle: 'Hydraulics paper',
-            zoteroAbstract: 'Hydraulic evidence.',
-          },
+describe('Ollama request builders', () => {
+  const corpus = buildLiteratureReportCorpus(
+    [
+      {
+        path: 'Literature/@smith2026.md',
+        basename: '@smith2026',
+        frontmatter: {
+          zoteroTopic: 'hydraulics',
+          zoteroTitle: 'Hydraulics paper',
+          zoteroPublication: 'Tree Physiology',
+          zoteroAbstract: 'Hydraulic evidence.',
         },
-      ],
-      'zoteroTopic',
-      'hydraulics'
-    );
-    const body = buildOllamaEvidenceMapRequest({
+      },
+    ],
+    'zoteroTopic',
+    'hydraulics'
+  );
+
+  it('builds prompt-generation and prompt-revision requests with context', () => {
+    const context = {
+      filePath: 'Projects/Context.md',
+      fileText: 'Project context text.',
+      pastedText: 'Pasted context text.',
+    };
+    const generated = buildOllamaSynthesisPromptRequest({
       corpus,
-      basePrompt: 'Use evidence only.',
-      additionalPrompt: 'Focus on methods.',
+      context,
       language: 'English',
       model: 'llama3.2',
+      mode: 'standard',
+    });
+    const revised = buildOllamaSynthesisPromptRevisionRequest({
+      corpus,
+      context,
+      language: 'English',
+      model: 'llama3.2',
+      mode: 'standard',
+      currentPrompt: 'Current prompt.',
+      revisionInstruction: 'Make it narrower.',
     });
 
-    expect(body).toMatchObject({
+    expect(generated.format).toHaveProperty('properties.prompt');
+    expect(generated.messages[1].content).toContain('Project context text.');
+    expect(revised.messages[1].content).toContain('Make it narrower.');
+  });
+
+  it('builds triage and synthesis requests with schemas and selected evidence', () => {
+    const triageRequest = buildOllamaLiteratureTriageRequest({
+      corpus,
+      context: {},
+      synthesisPrompt: 'Focus on methods.',
+      language: 'English',
       model: 'llama3.2',
-      stream: false,
+      mode: 'standard',
     });
-    expect(body.format).toHaveProperty('properties.themes');
-    expect(body.messages[1].content).toContain('"id": "S1-abstract"');
-    expect(body.messages[1].content).toContain('Focus on methods.');
+    const triage = validateAiLiteratureTriage(
+      {
+        selectedSources: [
+          {
+            sourceId: 'S1',
+            relevanceScore: 0.8,
+            reason: 'Relevant method evidence.',
+            theme: 'Methods',
+            evidenceIds: ['S1-abstract'],
+          },
+        ],
+      },
+      corpus,
+      'standard'
+    );
+    const synthesisRequest = buildOllamaLiteratureSynthesisRequest({
+      corpus,
+      context: {},
+      synthesisPrompt: 'Focus on methods.',
+      language: 'English',
+      model: 'llama3.2',
+      mode: 'standard',
+      triage,
+    });
+
+    expect(triageRequest.format).toHaveProperty('properties.selectedSources');
+    expect(triageRequest.messages[1].content).toContain('"id": "S1-abstract"');
+    expect(synthesisRequest.format).toHaveProperty('properties.themes');
+    expect(synthesisRequest.messages[1].content).toContain(
+      'Use at most 5 bullets per theme'
+    );
+    expect(synthesisRequest.messages[1].content).toContain('"id": "S1-abstract"');
   });
 });

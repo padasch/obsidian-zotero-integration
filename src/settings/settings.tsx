@@ -80,6 +80,23 @@ function SettingsDivider() {
   return <hr className="zt-settings-divider" />;
 }
 
+function SettingsSubheading({
+  title,
+  description,
+}: {
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div className="zt-settings-subheading">
+      <div className="zt-settings-subheading-title">{title}</div>
+      {description ? (
+        <p className="zt-settings-subheading-description">{description}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function SettingsSection({
   title,
   description,
@@ -263,7 +280,7 @@ function SettingsComponent({
         imageBaseNameTemplate: '@{{citekey}}-image',
       })
     );
-  }, [addExportFormat, citeFormatState]);
+  }, [addExportFormat, exportFormatState]);
 
   const removeExport = React.useCallback(
     (index: number) => {
@@ -343,6 +360,10 @@ function SettingsComponent({
         title="Import basics"
         description="Connection and default behavior for importing Zotero notes."
       >
+        <SettingsSubheading
+          title="Zotero connection and PDF utility"
+          description="Connection settings and the optional helper used to extract PDF annotations."
+        />
         <AssetDownloader settings={settings} updateSetting={updateSetting} />
         <SettingItem
           name="Database"
@@ -377,6 +398,10 @@ function SettingsComponent({
             />
           </SettingItem>
         ) : null}
+        <SettingsSubheading
+          title="Import behavior"
+          description="Where imported notes go and what Obsidian opens after an import finishes."
+        />
         <SettingItem
           name="Note Import Location"
           description="Default folder for new notes when an import format output path is only a file name. Output paths that already include folders are used as written."
@@ -485,9 +510,14 @@ function SettingsComponent({
         title="Metadata and properties"
         description="Frontmatter behavior and shared Zotero item table display."
       >
+        <SettingsSubheading
+          title="Frontmatter preservation"
+          description="Metadata that should survive note updates and re-imports."
+        />
         <SettingItem
           name="Preserved properties"
           description="Existing frontmatter properties copied back after an update or re-import. Use one property per line."
+          className="zt-setting-item-wide"
         >
           <div className="zt-settings-textarea-field">
             <textarea
@@ -497,7 +527,10 @@ function SettingsComponent({
               onChange={(e) => {
                 const value = (e.target as HTMLTextAreaElement).value;
                 setPreservedPropertiesText(value);
-                updateSetting('zoteroPreservedProperties', splitLineInput(value));
+                updateSetting(
+                  'zoteroPreservedProperties',
+                  splitLineInput(value)
+                );
               }}
             />
             <p className="zt-settings-field-note">
@@ -511,9 +544,14 @@ function SettingsComponent({
             />
           </div>
         </SettingItem>
+        <SettingsSubheading
+          title="Review table and annotations"
+          description="Display fields used in Zotero item lists and colors that indicate follow-up annotations."
+        />
         <SettingItem
           name="Zotero item table columns"
           description="Columns shown by Zotero item import/review tables. Use one key per line; order controls table order."
+          className="zt-setting-item-wide"
         >
           <div className="zt-settings-textarea-field">
             <textarea
@@ -523,7 +561,10 @@ function SettingsComponent({
               onChange={(e) => {
                 const value = (e.target as HTMLTextAreaElement).value;
                 setZoteroItemTableColumnsText(value);
-                updateSetting('zoteroItemTableColumns', splitLineInput(value));
+                updateSetting(
+                  'zoteroItemTableColumns',
+                  splitLineInput(value)
+                );
               }}
             />
             <p className="zt-settings-field-note">
@@ -573,62 +614,64 @@ function SettingsComponent({
             })}
           </div>
         </SettingItem>
-        <SettingsSection
-          title="scite metadata"
-          description="Fetch citation-statement tallies into literature-note frontmatter."
-          collapsible
-          defaultOpen={!!settings.zoteroSciteEnabled}
-          level={3}
+      </SettingsSection>
+
+      <SettingsDivider />
+
+      <SettingsSection
+        title="scite metadata"
+        description="Optional citation-statement tallies for imported literature notes."
+        collapsible
+        defaultOpen={!!settings.zoteroSciteEnabled}
+      >
+        <SettingItem
+          name="Enable scite metadata"
+          description="Allow imports to request scite metadata for notes with a DOI. The refresh command can still be run manually."
         >
-          <SettingItem
-            name="Enable scite metadata"
-            description="Allow imports to request scite metadata for notes with a DOI. The refresh command can still be run manually."
-          >
-            <div
-              onClick={() => {
-                setZoteroSciteEnabled((state) => {
-                  updateSetting('zoteroSciteEnabled', !state);
-                  return !state;
-                });
-              }}
-              className={`checkbox-container${
-                zoteroSciteEnabled ? ' is-enabled' : ''
-              }`}
-            />
-          </SettingItem>
-          <SettingItem
-            name="Refresh scite on import"
-            description="When scite metadata is enabled, add or update scite frontmatter after each successful import."
-          >
-            <div
-              onClick={() => {
-                setZoteroSciteRefreshOnImport((state) => {
-                  updateSetting('zoteroSciteRefreshOnImport', !state);
-                  return !state;
-                });
-              }}
-              className={`checkbox-container${
-                zoteroSciteRefreshOnImport ? ' is-enabled' : ''
-              }`}
-            />
-          </SettingItem>
-          <SettingItem
-            name="scite API token"
-            description="Optional. Leave blank for unauthenticated requests; add a token if your scite account requires one."
-          >
-            <input
-              type="password"
-              spellCheck={false}
-              defaultValue={settings.zoteroSciteApiToken || ''}
-              onChange={(e) =>
-                updateSetting(
-                  'zoteroSciteApiToken',
-                  (e.target as HTMLInputElement).value.trim()
-                )
-              }
-            />
-          </SettingItem>
-        </SettingsSection>
+          <div
+            onClick={() => {
+              setZoteroSciteEnabled((state) => {
+                updateSetting('zoteroSciteEnabled', !state);
+                return !state;
+              });
+            }}
+            className={`checkbox-container${
+              zoteroSciteEnabled ? ' is-enabled' : ''
+            }`}
+          />
+        </SettingItem>
+        <SettingItem
+          name="Refresh scite on import"
+          description="When scite metadata is enabled, add or update scite frontmatter after each successful import."
+        >
+          <div
+            onClick={() => {
+              setZoteroSciteRefreshOnImport((state) => {
+                updateSetting('zoteroSciteRefreshOnImport', !state);
+                return !state;
+              });
+            }}
+            className={`checkbox-container${
+              zoteroSciteRefreshOnImport ? ' is-enabled' : ''
+            }`}
+          />
+        </SettingItem>
+        <SettingItem
+          name="scite API token"
+          description="Optional. Leave blank for unauthenticated requests; add a token if your scite account requires one."
+        >
+          <input
+            type="password"
+            spellCheck={false}
+            defaultValue={settings.zoteroSciteApiToken || ''}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroSciteApiToken',
+                (e.target as HTMLInputElement).value.trim()
+              )
+            }
+          />
+        </SettingItem>
       </SettingsSection>
 
       <SettingsDivider />
@@ -637,6 +680,10 @@ function SettingsComponent({
         title="Missing references and monitor"
         description="Find recent Zotero items that do not yet have Obsidian literature-note properties."
       >
+        <SettingsSubheading
+          title="Review workflow"
+          description="Manual review and import behavior for Zotero items not yet represented by Obsidian notes."
+        />
         <SettingItem
           name="Enable Zotero monitor"
           description="Check Zotero for recently added citekeyed items that are missing Obsidian literature-note properties."
@@ -696,128 +743,134 @@ function SettingsComponent({
         <SettingItem name="Check Zotero now">
           <button onClick={runZoteroMonitorCheck}>Check now</button>
         </SettingItem>
-        <SettingsSection
-          title="Monitor filters and schedule"
-          description="Narrow automatic checks by date, library, collection, or tag."
-          collapsible
-          defaultOpen={false}
-          level={3}
+      </SettingsSection>
+
+      <SettingsDivider />
+
+      <SettingsSection
+        title="Monitor filters and schedule"
+        description="Optional background checks and filters for missing-reference detection."
+        collapsible
+        defaultOpen={false}
+      >
+        <SettingItem
+          name="Check when Obsidian starts"
+          description="Run the monitor after the workspace loads. The monitor must also be enabled."
         >
-          <SettingItem
-            name="Check when Obsidian starts"
-            description="Run the monitor after the workspace loads. The monitor must also be enabled."
-          >
-            <div
-              onClick={() => {
-                setZoteroMonitorStartup((state) => {
-                  updateSetting('zoteroMonitorCheckOnStartup', !state);
-                  return !state;
-                });
-              }}
-              className={`checkbox-container${
-                zoteroMonitorStartup ? ' is-enabled' : ''
-              }`}
-            />
-          </SettingItem>
-          <SettingItem
-            name="Check interval"
-            description="Minutes between automatic checks. Use 0 to disable recurring checks."
-          >
-            <input
-              min="0"
-              type="number"
-              defaultValue={settings.zoteroMonitorIntervalMinutes.toString()}
-              onChange={(e) =>
-                updateSetting(
-                  'zoteroMonitorIntervalMinutes',
-                  Number((e.target as HTMLInputElement).value)
-                )
-              }
-            />
-          </SettingItem>
-          <SettingItem
-            name="Recent Zotero items"
-            description="Only consider items added to Zotero within this many days. Leave blank for all time."
-          >
-            <input
-              min="0"
-              type="number"
-              placeholder="30"
-              defaultValue={settings.zoteroMonitorRecentDays?.toString() || ''}
-              onChange={(e) => {
-                const value = (e.target as HTMLInputElement).value;
-                updateSetting(
-                  'zoteroMonitorRecentDays',
-                  value === '' ? null : Number(value)
-                );
-              }}
-            />
-          </SettingItem>
-          <SettingItem
-            name="Libraries or groups"
-            description="Optional comma-separated Zotero library IDs or library/group names. Leave blank for all libraries."
-          >
-            <input
-              type="text"
-              spellCheck={false}
-              placeholder="1, My Group Library"
-              defaultValue={formatScopeInput(settings.zoteroMonitorLibraryScope)}
-              onChange={(e) =>
-                updateSetting(
-                  'zoteroMonitorLibraryScope',
-                  splitScopeInput((e.target as HTMLInputElement).value)
-                )
-              }
-            />
-          </SettingItem>
-          <SettingItem
-            name="Collection paths"
-            description="Optional comma-separated exact Zotero collection paths, such as Reading/Queue."
-          >
-            <input
-              type="text"
-              spellCheck={false}
-              placeholder="Reading/Queue"
-              defaultValue={formatScopeInput(
-                settings.zoteroMonitorCollectionScope
-              )}
-              onChange={(e) =>
-                updateSetting(
-                  'zoteroMonitorCollectionScope',
-                  splitScopeInput((e.target as HTMLInputElement).value)
-                )
-              }
-            />
-          </SettingItem>
-          <SettingItem
-            name="Tags"
-            description="Optional comma-separated exact Zotero tags. Leave blank for all tags."
-          >
-            <input
-              type="text"
-              spellCheck={false}
-              placeholder="to-read, paper"
-              defaultValue={formatScopeInput(settings.zoteroMonitorTagScope)}
-              onChange={(e) =>
-                updateSetting(
-                  'zoteroMonitorTagScope',
-                  splitScopeInput((e.target as HTMLInputElement).value)
-                )
-              }
-            />
-          </SettingItem>
-        </SettingsSection>
+          <div
+            onClick={() => {
+              setZoteroMonitorStartup((state) => {
+                updateSetting('zoteroMonitorCheckOnStartup', !state);
+                return !state;
+              });
+            }}
+            className={`checkbox-container${
+              zoteroMonitorStartup ? ' is-enabled' : ''
+            }`}
+          />
+        </SettingItem>
+        <SettingItem
+          name="Check interval"
+          description="Minutes between automatic checks. Use 0 to disable recurring checks."
+        >
+          <input
+            min="0"
+            type="number"
+            defaultValue={settings.zoteroMonitorIntervalMinutes.toString()}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroMonitorIntervalMinutes',
+                Number((e.target as HTMLInputElement).value)
+              )
+            }
+          />
+        </SettingItem>
+        <SettingItem
+          name="Recent Zotero items"
+          description="Only consider items added to Zotero within this many days. Leave blank for all time."
+        >
+          <input
+            min="0"
+            type="number"
+            placeholder="30"
+            defaultValue={settings.zoteroMonitorRecentDays?.toString() || ''}
+            onChange={(e) => {
+              const value = (e.target as HTMLInputElement).value;
+              updateSetting(
+                'zoteroMonitorRecentDays',
+                value === '' ? null : Number(value)
+              );
+            }}
+          />
+        </SettingItem>
+        <SettingItem
+          name="Libraries or groups"
+          description="Optional comma-separated Zotero library IDs or library/group names. Leave blank for all libraries."
+        >
+          <input
+            type="text"
+            spellCheck={false}
+            placeholder="1, My Group Library"
+            defaultValue={formatScopeInput(settings.zoteroMonitorLibraryScope)}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroMonitorLibraryScope',
+                splitScopeInput((e.target as HTMLInputElement).value)
+              )
+            }
+          />
+        </SettingItem>
+        <SettingItem
+          name="Collection paths"
+          description="Optional comma-separated exact Zotero collection paths, such as Reading/Queue."
+        >
+          <input
+            type="text"
+            spellCheck={false}
+            placeholder="Reading/Queue"
+            defaultValue={formatScopeInput(
+              settings.zoteroMonitorCollectionScope
+            )}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroMonitorCollectionScope',
+                splitScopeInput((e.target as HTMLInputElement).value)
+              )
+            }
+          />
+        </SettingItem>
+        <SettingItem
+          name="Tags"
+          description="Optional comma-separated exact Zotero tags. Leave blank for all tags."
+        >
+          <input
+            type="text"
+            spellCheck={false}
+            placeholder="to-read, paper"
+            defaultValue={formatScopeInput(settings.zoteroMonitorTagScope)}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroMonitorTagScope',
+                splitScopeInput((e.target as HTMLInputElement).value)
+              )
+            }
+          />
+        </SettingItem>
       </SettingsSection>
 
       <SettingsDivider />
 
       <SettingsSection
         title="Literature reports"
-        description="Generate local Ollama evidence-map reports from imported Zotero literature notes."
+        description="Generate local Ollama synthesis reports from imported Zotero literature notes."
       >
+        <SettingsSubheading
+          title="Report output"
+          description="Where generated synthesis notes are saved."
+        />
         <SettingItem
           name="Report folder"
-          description="Folder where generated literature evidence maps are saved."
+          description="Folder where generated literature synthesis reports are saved."
         >
           <div className="zt-picker-field">
             <input
@@ -840,6 +893,10 @@ function SettingsComponent({
             </button>
           </div>
         </SettingItem>
+        <SettingsSubheading
+          title="Local Ollama"
+          description="Local-only model endpoint used when generating the editable report preview."
+        />
         <SettingItem
           name="Ollama URL"
           description="Local Ollama server URL. Report generation only sends evidence records to this local endpoint."
@@ -861,7 +918,7 @@ function SettingsComponent({
         </SettingItem>
         <SettingItem
           name="Ollama model"
-          description="Local model used for evidence-map synthesis."
+          description="Local model used for literature synthesis."
         >
           <input
             type="text"
@@ -897,9 +954,14 @@ function SettingsComponent({
             }
           />
         </SettingItem>
+        <SettingsSubheading
+          title="Prompt template"
+          description="Reusable default instructions for project-centered literature synthesis."
+        />
         <SettingItem
-          name="Evidence-map prompt"
-          description="Base prompt used for literature report generation. The modal can add one-time instructions per report."
+          name="Synthesis prompt"
+          description="Default prompt used for literature synthesis. The modal can generate, revise, and edit a report-specific prompt."
+          className="zt-setting-item-wide"
         >
           <div className="zt-settings-textarea-field">
             <textarea
@@ -913,8 +975,8 @@ function SettingsComponent({
               }}
             />
             <p className="zt-settings-field-note">
-              The report renderer omits AI claims that do not cite valid
-              evidence IDs extracted from local notes.
+              Context can guide relevance, but the renderer omits AI claims
+              that do not cite valid evidence IDs extracted from local notes.
             </p>
             <button
               type="button"
@@ -938,7 +1000,7 @@ function SettingsComponent({
         title="Citation formats"
         description="Commands that insert formatted citations or rendered citation templates."
       >
-        <SettingItem>
+        <SettingItem className="zt-setting-item-actions">
           <button onClick={addCite} className="mod-cta">
             Add Citation Format
           </button>
@@ -962,7 +1024,7 @@ function SettingsComponent({
         title="Import formats"
         description="Templates and output paths used by Zotero import commands."
       >
-        <SettingItem>
+        <SettingItem className="zt-setting-item-actions">
           <button onClick={addExport} className="mod-cta">
             Add Import Format
           </button>
