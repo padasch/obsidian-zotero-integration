@@ -5,6 +5,13 @@ import which from 'which';
 
 import ZoteroConnector from '../main';
 import {
+  DEFAULT_LITERATURE_REPORT_FOLDER,
+  DEFAULT_LITERATURE_REPORT_LANGUAGE,
+  DEFAULT_LITERATURE_REPORT_MODEL,
+  DEFAULT_LITERATURE_REPORT_OLLAMA_URL,
+  DEFAULT_LITERATURE_REPORT_PROMPT,
+} from '../LiteratureEvidenceMap';
+import {
   ZOTERO_ANNOTATION_COLORS,
   ZOTERO_ANNOTATION_COLOR_HEX,
 } from '../ZoteroManagedProperties';
@@ -196,6 +203,14 @@ function SettingsComponent({
 
   const [preservedPropertiesText, setPreservedPropertiesText] =
     React.useState(() => formatLineInput(settings.zoteroPreservedProperties));
+  const [literatureReportFolder, setLiteratureReportFolder] = React.useState(
+    settings.zoteroLiteratureReportFolder ||
+      DEFAULT_LITERATURE_REPORT_FOLDER
+  );
+  const [literatureReportPrompt, setLiteratureReportPrompt] = React.useState(
+    settings.zoteroLiteratureReportPrompt ||
+      DEFAULT_LITERATURE_REPORT_PROMPT
+  );
 
   const [taskAnnotationColors, setTaskAnnotationColors] = React.useState(
     settings.zoteroTaskAnnotationColors || []
@@ -313,6 +328,13 @@ function SettingsComponent({
         availablePropertyKeys
       ),
     [availablePropertyKeys, preservedProperties]
+  );
+  const onChangeLiteratureReportFolder = React.useCallback(
+    (value: string) => {
+      setLiteratureReportFolder(value);
+      updateSetting('zoteroLiteratureReportFolder', value);
+    },
+    [updateSetting]
   );
 
   return (
@@ -785,6 +807,129 @@ function SettingsComponent({
             />
           </SettingItem>
         </SettingsSection>
+      </SettingsSection>
+
+      <SettingsDivider />
+
+      <SettingsSection
+        title="Literature reports"
+        description="Generate local Ollama evidence-map reports from imported Zotero literature notes."
+      >
+        <SettingItem
+          name="Report folder"
+          description="Folder where generated literature evidence maps are saved."
+        >
+          <div className="zt-picker-field">
+            <input
+              type="text"
+              value={literatureReportFolder}
+              placeholder={DEFAULT_LITERATURE_REPORT_FOLDER}
+              onInput={(e) =>
+                onChangeLiteratureReportFolder(
+                  (e.target as HTMLInputElement).value
+                )
+              }
+            />
+            <button
+              type="button"
+              className="clickable-icon setting-editor-extra-setting-button zt-picker-button"
+              aria-label="Choose report folder"
+              onClick={() => openFolderPicker(onChangeLiteratureReportFolder)}
+            >
+              <Icon name="lucide-folder-search" />
+            </button>
+          </div>
+        </SettingItem>
+        <SettingItem
+          name="Ollama URL"
+          description="Local Ollama server URL. Report generation only sends evidence records to this local endpoint."
+        >
+          <input
+            type="text"
+            spellCheck={false}
+            defaultValue={
+              settings.zoteroLiteratureReportOllamaUrl ||
+              DEFAULT_LITERATURE_REPORT_OLLAMA_URL
+            }
+            onChange={(e) =>
+              updateSetting(
+                'zoteroLiteratureReportOllamaUrl',
+                (e.target as HTMLInputElement).value.trim()
+              )
+            }
+          />
+        </SettingItem>
+        <SettingItem
+          name="Ollama model"
+          description="Local model used for evidence-map synthesis."
+        >
+          <input
+            type="text"
+            spellCheck={false}
+            defaultValue={
+              settings.zoteroLiteratureReportModel ||
+              DEFAULT_LITERATURE_REPORT_MODEL
+            }
+            onChange={(e) =>
+              updateSetting(
+                'zoteroLiteratureReportModel',
+                (e.target as HTMLInputElement).value.trim()
+              )
+            }
+          />
+        </SettingItem>
+        <SettingItem
+          name="Report language"
+          description="Output language requested from the local model."
+        >
+          <input
+            type="text"
+            spellCheck={false}
+            defaultValue={
+              settings.zoteroLiteratureReportLanguage ||
+              DEFAULT_LITERATURE_REPORT_LANGUAGE
+            }
+            onChange={(e) =>
+              updateSetting(
+                'zoteroLiteratureReportLanguage',
+                (e.target as HTMLInputElement).value.trim()
+              )
+            }
+          />
+        </SettingItem>
+        <SettingItem
+          name="Evidence-map prompt"
+          description="Base prompt used for literature report generation. The modal can add one-time instructions per report."
+        >
+          <div className="zt-settings-textarea-field">
+            <textarea
+              spellCheck={false}
+              rows={8}
+              value={literatureReportPrompt}
+              onChange={(e) => {
+                const value = (e.target as HTMLTextAreaElement).value;
+                setLiteratureReportPrompt(value);
+                updateSetting('zoteroLiteratureReportPrompt', value);
+              }}
+            />
+            <p className="zt-settings-field-note">
+              The report renderer omits AI claims that do not cite valid
+              evidence IDs extracted from local notes.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setLiteratureReportPrompt(DEFAULT_LITERATURE_REPORT_PROMPT);
+                updateSetting(
+                  'zoteroLiteratureReportPrompt',
+                  DEFAULT_LITERATURE_REPORT_PROMPT
+                );
+              }}
+            >
+              Reset prompt
+            </button>
+          </div>
+        </SettingItem>
       </SettingsSection>
 
       <SettingsDivider />

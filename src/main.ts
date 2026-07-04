@@ -10,6 +10,14 @@ import {
 import { shellPath } from 'shell-path';
 
 import { DataExplorerView, viewType } from './DataExplorerView';
+import {
+  DEFAULT_LITERATURE_REPORT_FOLDER,
+  DEFAULT_LITERATURE_REPORT_LANGUAGE,
+  DEFAULT_LITERATURE_REPORT_MODEL,
+  DEFAULT_LITERATURE_REPORT_OLLAMA_URL,
+  DEFAULT_LITERATURE_REPORT_PROMPT,
+} from './LiteratureEvidenceMap';
+import { openLiteratureEvidenceMapModal } from './LiteratureEvidenceMapModal';
 import { LoadingModal } from './bbt/LoadingModal';
 import { getCAYW } from './bbt/cayw';
 import { exportToMarkdown, renderCiteTemplate } from './bbt/export';
@@ -113,6 +121,11 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   zoteroSciteEnabled: false,
   zoteroSciteRefreshIntervalDays: 7,
   zoteroSciteRefreshOnImport: true,
+  zoteroLiteratureReportFolder: DEFAULT_LITERATURE_REPORT_FOLDER,
+  zoteroLiteratureReportOllamaUrl: DEFAULT_LITERATURE_REPORT_OLLAMA_URL,
+  zoteroLiteratureReportModel: DEFAULT_LITERATURE_REPORT_MODEL,
+  zoteroLiteratureReportLanguage: DEFAULT_LITERATURE_REPORT_LANGUAGE,
+  zoteroLiteratureReportPrompt: DEFAULT_LITERATURE_REPORT_PROMPT,
 };
 
 async function fixPath() {
@@ -211,6 +224,14 @@ export default class ZoteroConnector extends Plugin {
       name: 'Update existing notes',
       callback: () => {
         this.zoteroMonitor.runUpdateNotesCheck();
+      },
+    });
+
+    this.addCommand({
+      id: 'zdc-generate-literature-evidence-map',
+      name: 'Generate literature evidence map',
+      callback: () => {
+        openLiteratureEvidenceMapModal(this);
       },
     });
 
@@ -413,6 +434,9 @@ export default class ZoteroConnector extends Plugin {
       mergedSettings.zoteroItemTableColumns ||
         mergedSettings.zoteroMonitorTableColumns
     );
+    mergedSettings.zoteroLiteratureReportPrompt =
+      mergedSettings.zoteroLiteratureReportPrompt ||
+      DEFAULT_LITERATURE_REPORT_PROMPT;
     delete mergedSettings.zoteroMonitorTableColumns;
 
     this.settings = mergedSettings;

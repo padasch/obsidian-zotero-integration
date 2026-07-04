@@ -835,8 +835,122 @@ h3.zt-settings-section-title {
   padding: 0.4rem 0.75rem;
 }
 
+.modal.zt-literature-report-modal-shell {
+  max-width: calc(100vw - 64px);
+  width: min(980px, calc(100vw - 64px));
+}
+
+.modal.zt-literature-report-modal-shell .modal-content {
+  max-height: min(88vh, 920px);
+  overflow: hidden;
+  padding: 0;
+}
+
+.zt-literature-report-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-4);
+  height: min(88vh, 920px);
+  min-width: 0;
+  overflow: hidden;
+  padding: var(--size-4-4) var(--size-4-3) var(--size-4-2);
+}
+
+.zt-literature-report-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+}
+
+.zt-literature-report-header h2,
+.zt-literature-report-header p {
+  margin: 0;
+}
+
+.zt-literature-report-header p,
+.zt-literature-report-status {
+  color: var(--text-muted);
+}
+
+.zt-literature-report-controls {
+  display: grid;
+  gap: var(--size-4-3);
+  grid-template-columns: minmax(180px, 0.8fr) minmax(240px, 1.2fr);
+}
+
+.zt-literature-report-field,
+.zt-literature-report-field-wide,
+.zt-literature-report-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-1);
+  min-width: 0;
+}
+
+.zt-literature-report-field-wide,
+.zt-literature-report-preview {
+  grid-column: 1 / -1;
+}
+
+.zt-literature-report-field label,
+.zt-literature-report-field-wide label,
+.zt-literature-report-preview label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+}
+
+.zt-literature-report-field select,
+.zt-literature-report-field-wide textarea,
+.zt-literature-report-preview textarea {
+  width: 100%;
+}
+
+.zt-literature-report-action-bar {
+  align-items: center;
+  display: flex;
+  gap: var(--size-4-3);
+  justify-content: space-between;
+}
+
+.zt-literature-report-status {
+  font-size: var(--font-ui-smaller);
+  overflow-wrap: anywhere;
+}
+
+.zt-literature-report-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-2);
+  justify-content: flex-end;
+}
+
+.zt-literature-report-buttons button {
+  border-radius: var(--radius-s);
+  box-shadow: none;
+  height: auto;
+  min-height: 0;
+  padding: 0.4rem 0.75rem;
+}
+
+.zt-literature-report-preview {
+  flex: 1;
+  min-height: 0;
+}
+
+.zt-literature-report-preview textarea {
+  flex: 1;
+  min-height: 260px;
+  resize: none;
+}
+
 @media (max-width: 900px) {
   .modal.zt-monitor-modal-shell {
+    max-width: calc(100vw - 24px);
+    width: calc(100vw - 24px);
+  }
+
+  .modal.zt-literature-report-modal-shell {
     max-width: calc(100vw - 24px);
     width: calc(100vw - 24px);
   }
@@ -845,16 +959,22 @@ h3.zt-settings-section-title {
     grid-template-columns: 1fr;
   }
 
+  .zt-literature-report-controls {
+    grid-template-columns: 1fr;
+  }
+
   .zt-monitor-quick-select {
     justify-self: start;
   }
 
-  .zt-monitor-action-bar {
+  .zt-monitor-action-bar,
+  .zt-literature-report-action-bar {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .zt-monitor-buttons {
+  .zt-monitor-buttons,
+  .zt-literature-report-buttons {
     justify-content: flex-start;
   }
 

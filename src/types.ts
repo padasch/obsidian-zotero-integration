@@ -80,6 +80,7 @@ export interface ZoteroManagedUserProperties {
 }
 
 export type ZoteroMonitorAutomaticAction = 'notice' | 'modal';
+export type LiteratureReportScopeProperty = 'zoteroProject' | 'zoteroTopic';
 export type ZoteroItemTableColumn =
   | 'title'
   | 'citekey'
@@ -159,6 +160,11 @@ export interface ZoteroConnectorSettings {
   zoteroSciteEnabled?: boolean;
   zoteroSciteRefreshIntervalDays?: number;
   zoteroSciteRefreshOnImport?: boolean;
+  zoteroLiteratureReportFolder?: string;
+  zoteroLiteratureReportOllamaUrl?: string;
+  zoteroLiteratureReportModel?: string;
+  zoteroLiteratureReportLanguage?: string;
+  zoteroLiteratureReportPrompt?: string;
 }
 
 export interface CiteKeyExport {
