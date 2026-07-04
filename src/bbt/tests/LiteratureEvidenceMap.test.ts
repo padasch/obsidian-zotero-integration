@@ -5,6 +5,7 @@ import {
   buildOllamaLiteratureTriageRequest,
   buildOllamaSynthesisPromptRequest,
   buildOllamaSynthesisPromptRevisionRequest,
+  buildFallbackLiteratureTriage,
   frontmatterMatchesScope,
   renderLiteratureSynthesisReport,
   validateAiLiteratureSynthesis,
@@ -396,6 +397,7 @@ describe('Ollama request builders', () => {
   );
 
   it('builds prompt-generation and prompt-revision requests with context', () => {
+    const researchQuestion = 'What do we know about drought effects on forest hydraulics?';
     const context = {
       filePath: 'Projects/Context.md',
       fileText: 'Project context text.',
@@ -404,6 +406,7 @@ describe('Ollama request builders', () => {
     const generated = buildOllamaSynthesisPromptRequest({
       corpus,
       context,
+      researchQuestion,
       language: 'English',
       model: 'llama3.2',
       mode: 'standard',
@@ -411,6 +414,7 @@ describe('Ollama request builders', () => {
     const revised = buildOllamaSynthesisPromptRevisionRequest({
       corpus,
       context,
+      researchQuestion,
       language: 'English',
       model: 'llama3.2',
       mode: 'standard',
@@ -419,14 +423,19 @@ describe('Ollama request builders', () => {
     });
 
     expect(generated.format).toHaveProperty('properties.prompt');
+    expect(generated.messages[1].content).toContain('Research question:\nWhat do we know about drought effects on forest hydraulics?');
+    expect(generated.messages[1].content).toContain('Project context:');
     expect(generated.messages[1].content).toContain('Project context text.');
+    expect(revised.messages[1].content).toContain(researchQuestion);
     expect(revised.messages[1].content).toContain('Make it narrower.');
   });
 
   it('builds triage and synthesis requests with schemas and selected evidence', () => {
+    const researchQuestion = 'Which mechanisms best explain drought-induced mortality in oaks?';
     const triageRequest = buildOllamaLiteratureTriageRequest({
       corpus,
       context: {},
+      researchQuestion,
       synthesisPrompt: 'Focus on methods.',
       language: 'English',
       model: 'llama3.2',
@@ -450,6 +459,7 @@ describe('Ollama request builders', () => {
     const synthesisRequest = buildOllamaLiteratureSynthesisRequest({
       corpus,
       context: {},
+      researchQuestion,
       synthesisPrompt: 'Focus on methods.',
       language: 'English',
       model: 'llama3.2',
@@ -459,10 +469,167 @@ describe('Ollama request builders', () => {
 
     expect(triageRequest.format).toHaveProperty('properties.selectedSources');
     expect(triageRequest.messages[1].content).toContain('"id": "S1-abstract"');
+    expect(triageRequest.messages[1].content).toContain(researchQuestion);
+    expect(triageRequest.messages[1].content).toContain(
+      'Prioritize directly relevant sources and evidence for the research question'
+    );
     expect(synthesisRequest.format).toHaveProperty('properties.themes');
     expect(synthesisRequest.messages[1].content).toContain(
       'Use at most 5 bullets per theme'
     );
     expect(synthesisRequest.messages[1].content).toContain('"id": "S1-abstract"');
+  });
+});
+
+describe('literature triage fallback', () => {
+  it('returns deterministic fallback source/evidence selections when AI does not select anything', () => {
+    const corpus = buildLiteratureReportCorpus(
+      [
+        {
+          path: 'Literature/@high.md',
+          basename: '@high',
+          frontmatter: {
+            zoteroProject: '[[Project A]]',
+            zoteroTitle: 'High citation paper',
+            zoteroSciteCitingPublications: 42,
+            zoteroAbstract: 'High citation abstract.',
+          },
+        },
+        {
+          path: 'Literature/@low.md',
+          basename: '@low',
+          frontmatter: {
+            zoteroProject: '[[Project A]]',
+            zoteroTitle: 'Low citation paper',
+            zoteroSciteCitingPublications: 4,
+            zoteroAbstract: 'Lower citation abstract.',
+          },
+        },
+      ],
+      'zoteroProject',
+      '[[Project A]]'
+    );
+
+    const fallback = buildFallbackLiteratureTriage(corpus, 'standard');
+
+    expect(fallback.selectedSources[0].sourceId).toBe('S1');
+    expect(fallback.selectedSources[0].evidenceIds[0]).toBe('S1-abstract');
+    expect(fallback.selectedEvidenceIds[0]).toBe('S1-abstract');
+    expect(fallback.selectedEvidenceIds).toContain('S2-abstract');
+  });
+
+  it('renders fallback-selected ids in synthesis validation', () => {
+    const corpus = buildLiteratureReportCorpus(
+      [
+        {
+          path: 'Literature/@high.md',
+          basename: '@high',
+          frontmatter: {
+            zoteroProject: '[[Project A]]',
+            zoteroTitle: 'High citation paper',
+            zoteroSciteCitingPublications: 42,
+            zoteroAbstract: 'High citation abstract.',
+          },
+        },
+      ],
+      'zoteroProject',
+      '[[Project A]]'
+    );
+    const fallback = buildFallbackLiteratureTriage(corpus, 'standard');
+
+    const synthesis = validateAiLiteratureSynthesis(
+      {
+        themes: [
+          {
+            title: 'Fallback coverage',
+            claims: [
+              {
+                claim: 'Fallback keeps core evidence visible.',
+                evidenceIds: fallback.selectedEvidenceIds,
+              },
+            ],
+          },
+        ],
+      },
+      corpus.evidence,
+      corpus.sources,
+      'standard'
+    );
+
+    expect(synthesis.themes[0].claims).toHaveLength(1);
+    expect(synthesis.themes[0].claims[0].claim).toMatch(/Fallback keeps core evidence/);
+    expect(synthesis.omittedClaimCount).toBe(0);
+  });
+});
+
+describe('question-first pipeline rendering', () => {
+  it('renders pipeline step log and fallback mode in the input callout', () => {
+    const corpus = buildLiteratureReportCorpus(
+      [
+        {
+          path: 'Literature/@paper.md',
+          basename: '@paper',
+          frontmatter: {
+            zoteroProject: '[[Project A]]',
+            zoteroTitle: 'Fallback drought paper',
+            citekey: 'paper2026',
+            zoteroYear: '2026',
+            zoteroAbstract: 'Drought evidence.',
+          },
+        },
+      ],
+      'zoteroProject',
+      '[[Project A]]'
+    );
+    const synthesis = validateAiLiteratureSynthesis(
+      {
+        title: 'Drought fallback synthesis',
+        themes: [
+          {
+            title: 'Core theme',
+            claims: [
+              {
+                claim: 'Fallback claims are still rendered.',
+                evidenceIds: ['S1-abstract'],
+              },
+            ],
+          },
+        ],
+      },
+      corpus.evidence,
+      corpus.sources,
+      'standard'
+    );
+
+    const markdown = renderLiteratureSynthesisReport({
+      corpus,
+      synthesis,
+      generatedAt: new Date('2026-07-04T10:00:00.000Z'),
+      model: 'llama3.2',
+      language: 'English',
+      mode: 'standard',
+      synthesisPrompt: 'Focus on drought.',
+      contextFilePath: undefined,
+      pastedContextUsed: false,
+      reportTitle: 'Drought fallback',
+      generationSteps: {
+        scopeScanNotes: 1,
+        evidenceRecords: 1,
+        strictTriageSources: 0,
+        strictTriageEvidence: 0,
+        relaxedTriageSources: 0,
+        relaxedTriageEvidence: 0,
+        fallbackSelectedSources: 1,
+        fallbackSelectedEvidence: 1,
+        finalClaimsGenerated: 1,
+        triageMode: 'fallback',
+      },
+    });
+
+    expect(markdown).toContain('> - Report triage mode: `fallback`');
+    expect(markdown).toContain('> - Triage strict: 0 sources, 0 evidence records');
+    expect(markdown).toContain('> - Triage relaxed: 0 sources, 0 evidence records');
+    expect(markdown).toContain('> - Triage fallback: 1 sources, 1 evidence records');
+    expect(markdown).toContain('> - Final claims generated: 1');
   });
 });

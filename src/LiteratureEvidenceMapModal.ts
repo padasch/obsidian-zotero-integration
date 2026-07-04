@@ -15,6 +15,8 @@ import {
   DEFAULT_LITERATURE_REPORT_MODEL,
   DEFAULT_LITERATURE_REPORT_OLLAMA_URL,
   DEFAULT_LITERATURE_REPORT_PROMPT,
+  LiteratureReportGenerationSteps,
+  buildFallbackLiteratureTriage,
   LiteratureReportContext,
   LiteratureReportCorpus,
   LiteratureReportMode,
@@ -81,6 +83,13 @@ function corpusPreview(corpus: LiteratureReportCorpus): string {
 }
 
 const PROMPT_PRESETS: PromptPreset[] = [
+  {
+    id: 'question-driven',
+    name: 'Question-driven synthesis',
+    description: 'Answer a specific research question directly, then synthesize across themes.',
+    prompt:
+      'Answer the research question first, then organize supporting, contrasting, and uncertain findings into themes. Preserve a clear line from evidence to conclusion and keep claims concise.',
+  },
   {
     id: 'theme-first',
     name: 'Theme-first synthesis',
@@ -205,12 +214,14 @@ class LiteratureEvidenceMapModal extends Modal {
   private generatePromptButton: HTMLButtonElement;
   private modeSelectEl: HTMLSelectElement;
   private pastedContextEl: HTMLTextAreaElement;
+  private researchQuestionEl: HTMLTextAreaElement;
   private previewEl: HTMLTextAreaElement;
   private reportMarkdown = '';
   private revisePromptButton: HTMLButtonElement;
   private revisionInstructionEl: HTMLTextAreaElement;
   private saveButton: HTMLButtonElement;
   private statusEl: HTMLDivElement;
+  private generationSteps: LiteratureReportGenerationSteps | null = null;
   private synthesisPromptEl: HTMLTextAreaElement;
   private titleInputEl: HTMLInputElement;
   private valueSelectEl: HTMLSelectElement;
@@ -241,6 +252,7 @@ class LiteratureEvidenceMapModal extends Modal {
     const controls = container.createDiv('zt-literature-report-controls');
     this.renderScopeControls(controls);
     this.renderTitleControl(controls);
+    this.renderQuestionControl(controls);
     this.renderContextControls(controls);
     this.renderPromptControls(controls);
 
@@ -341,6 +353,19 @@ class LiteratureEvidenceMapModal extends Modal {
     this.titleInputEl.type = 'text';
     this.titleInputEl.placeholder = 'Drought stress context';
     this.titleInputEl.addEventListener('input', () => this.clearPreview());
+  }
+
+  private renderQuestionControl(container: HTMLDivElement) {
+    const questionField = container.createDiv(
+      'zt-literature-report-field-wide'
+    );
+    questionField.createEl('label', { text: 'Research question (required)' });
+    this.researchQuestionEl = questionField.createEl('textarea');
+    this.researchQuestionEl.rows = 2;
+    this.researchQuestionEl.required = true;
+    this.researchQuestionEl.placeholder =
+      'Example: What do we know about drought effects on forest hydraulics?';
+    this.researchQuestionEl.addEventListener('input', () => this.clearPreview());
   }
 
   private renderContextControls(container: HTMLDivElement) {
@@ -534,6 +559,10 @@ class LiteratureEvidenceMapModal extends Modal {
     );
   }
 
+  private researchQuestion() {
+    return this.researchQuestionEl.value.trim();
+  }
+
   private async yieldToUi(): Promise<void> {
     await new Promise<void>((resolve) => {
       window.requestAnimationFrame(() => resolve());
@@ -543,6 +572,10 @@ class LiteratureEvidenceMapModal extends Modal {
   private async generateSynthesisPrompt() {
     if (!this.scopeValue) {
       this.setStatus('Choose a project or topic value first.');
+      return;
+    }
+    if (!this.researchQuestion()) {
+      this.setStatus('Enter a research question before generating a prompt.');
       return;
     }
 
@@ -562,6 +595,7 @@ class LiteratureEvidenceMapModal extends Modal {
       const requestBody = buildOllamaSynthesisPromptRequest({
         corpus,
         context,
+        researchQuestion: this.researchQuestion(),
         language: this.language(),
         model: this.model(),
         mode: this.getMode(),
@@ -603,6 +637,12 @@ class LiteratureEvidenceMapModal extends Modal {
       this.setStatus('Add a prompt revision instruction first.');
       return;
     }
+    if (!this.researchQuestion()) {
+      this.setStatus(
+        'Enter a research question before revising the synthesis prompt.'
+      );
+      return;
+    }
 
     this.setBusy(true);
     this.revisePromptButton.textContent = 'Revising prompt...';
@@ -620,6 +660,7 @@ class LiteratureEvidenceMapModal extends Modal {
       const requestBody = buildOllamaSynthesisPromptRevisionRequest({
         corpus,
         context,
+        researchQuestion: this.researchQuestion(),
         language: this.language(),
         model: this.model(),
         mode: this.getMode(),
@@ -662,6 +703,10 @@ class LiteratureEvidenceMapModal extends Modal {
       this.setStatus('Choose a project or topic value first.');
       return;
     }
+    if (!this.researchQuestion()) {
+      this.setStatus('Enter a research question before generating a report.');
+      return;
+    }
 
     this.setBusy(true);
     this.generateButton.textContent = 'Generating report...';
@@ -681,47 +726,98 @@ class LiteratureEvidenceMapModal extends Modal {
         );
         return;
       }
+      this.setStatus(
+        `Scope scan: ${corpus.sources.length} note(s). Evidence extraction: ${corpus.evidence.length} record(s).`
+      );
 
       const context = await this.getContext();
       const mode = this.getMode();
       const synthesisPrompt =
         this.synthesisPromptEl.value.trim() || DEFAULT_LITERATURE_REPORT_PROMPT;
+      const triageQuestion = this.researchQuestion();
+      const stepCounts: LiteratureReportGenerationSteps = {
+        scopeScanNotes: corpus.sources.length,
+        evidenceRecords: corpus.evidence.length,
+        strictTriageSources: 0,
+        strictTriageEvidence: 0,
+        relaxedTriageSources: 0,
+        relaxedTriageEvidence: 0,
+        fallbackSelectedSources: 0,
+        fallbackSelectedEvidence: 0,
+        finalClaimsGenerated: 0,
+        triageMode: 'strict',
+      };
 
       this.setStatus(
-        `Scope preview: ${corpusPreview(corpus)}. Running relevance triage...`
+        `Scope preview: ${corpusPreview(corpus)}. Running strict triage...`
       );
       const triageContent = await requestOllamaContent(
         this.plugin.settings,
         buildOllamaLiteratureTriageRequest({
           corpus,
           context,
+          researchQuestion: triageQuestion,
           synthesisPrompt,
           language: this.language(),
           model: this.model(),
           mode,
+          triageMode: 'strict',
         }),
         'Ollama returned an empty relevance-triage response.'
       );
-      const triage = validateAiLiteratureTriage(
+      let triage = validateAiLiteratureTriage(
         parseAiLiteratureTriageContent(triageContent),
         corpus,
         mode
       );
+      stepCounts.strictTriageSources = triage.selectedSources.length;
+      stepCounts.strictTriageEvidence = triage.selectedEvidenceIds.length;
+
       if (!triage.selectedEvidenceIds.length) {
         this.setStatus(
-          'Relevance triage did not select any evidence records for this scope and context.'
+          'Strict triage returned empty. Running relaxed triage for coverage...'
         );
-        return;
+        const relaxedTriageContent = await requestOllamaContent(
+          this.plugin.settings,
+          buildOllamaLiteratureTriageRequest({
+            corpus,
+            context,
+            researchQuestion: triageQuestion,
+            synthesisPrompt,
+            language: this.language(),
+            model: this.model(),
+            mode,
+            triageMode: 'relaxed',
+          }),
+          'Ollama returned an empty relevance-triage response.'
+        );
+        triage = validateAiLiteratureTriage(
+          parseAiLiteratureTriageContent(relaxedTriageContent),
+          corpus,
+          mode
+        );
+        stepCounts.relaxedTriageSources = triage.selectedSources.length;
+        stepCounts.relaxedTriageEvidence = triage.selectedEvidenceIds.length;
+      }
+
+      if (!triage.selectedEvidenceIds.length) {
+        this.setStatus('Relaxed triage returned empty. Running deterministic fallback...');
+        const fallbackTriage = buildFallbackLiteratureTriage(corpus, mode);
+        triage = fallbackTriage;
+        stepCounts.fallbackSelectedSources = fallbackTriage.selectedSources.length;
+        stepCounts.fallbackSelectedEvidence = fallbackTriage.selectedEvidenceIds.length;
+        stepCounts.triageMode = 'fallback';
       }
 
       this.setStatus(
-        `Generating synthesis from ${triage.selectedSources.length} selected papers and ${triage.selectedEvidenceIds.length} evidence records...`
+        `Synthesis: generating from ${triage.selectedSources.length} selected papers and ${triage.selectedEvidenceIds.length} evidence records...`
       );
       const synthesisContent = await requestOllamaContent(
         this.plugin.settings,
         buildOllamaLiteratureSynthesisRequest({
           corpus,
           context,
+          researchQuestion: triageQuestion,
           synthesisPrompt,
           language: this.language(),
           model: this.model(),
@@ -739,12 +835,18 @@ class LiteratureEvidenceMapModal extends Modal {
         corpus.sources,
         mode
       );
+      const finalClaimsGenerated =
+        synthesis.themes.flatMap((theme) => theme.claims).length +
+        synthesis.gaps.length;
+      stepCounts.finalClaimsGenerated = finalClaimsGenerated;
+      this.generationSteps = stepCounts;
 
       this.generatedAt = new Date();
       this.reportMarkdown = renderLiteratureSynthesisReport({
         corpus,
         synthesis,
         triage,
+        generationSteps: this.generationSteps,
         generatedAt: this.generatedAt,
         model: this.model(),
         language: this.language(),
@@ -759,6 +861,11 @@ class LiteratureEvidenceMapModal extends Modal {
       this.setStatus(
         `Preview generated from ${corpus.sources.length} notes; ${triage.selectedEvidenceIds.length} evidence records were used after triage.`
       );
+      if (this.generationSteps?.triageMode === 'fallback') {
+        this.setStatus(
+          `Preview generated with fallback triage: ${stepCounts.fallbackSelectedSources} sources, ${stepCounts.fallbackSelectedEvidence} evidence records.`
+        );
+      }
     } catch (error) {
       console.error(error);
       this.setStatus(

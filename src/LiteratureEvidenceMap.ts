@@ -1,5 +1,6 @@
 export type LiteratureReportScopeProperty = 'zoteroProject' | 'zoteroTopic';
 export type LiteratureReportMode = 'brief' | 'standard' | 'detailed';
+export type LiteratureTriageMode = 'strict' | 'relaxed' | 'fallback';
 
 export interface LiteratureReportNoteRecord {
   path: string;
@@ -126,6 +127,7 @@ export interface RenderLiteratureSynthesisReportParams {
   corpus: LiteratureReportCorpus;
   synthesis: ValidatedLiteratureSynthesis;
   triage?: ValidatedLiteratureTriage;
+  generationSteps?: LiteratureReportGenerationSteps;
   generatedAt: Date;
   model: string;
   language: string;
@@ -139,6 +141,7 @@ export interface RenderLiteratureSynthesisReportParams {
 export interface BuildOllamaSynthesisPromptRequestParams {
   corpus: LiteratureReportCorpus;
   context: LiteratureReportContext;
+  researchQuestion: string;
   language: string;
   model: string;
   mode: LiteratureReportMode;
@@ -153,14 +156,17 @@ export interface BuildOllamaSynthesisPromptRevisionRequestParams
 export interface BuildOllamaLiteratureTriageRequestParams {
   corpus: LiteratureReportCorpus;
   context: LiteratureReportContext;
+  researchQuestion: string;
   synthesisPrompt: string;
   language: string;
   model: string;
   mode: LiteratureReportMode;
+  triageMode?: LiteratureTriageMode;
 }
 
 export interface BuildOllamaLiteratureSynthesisRequestParams
   extends BuildOllamaLiteratureTriageRequestParams {
+  researchQuestion: string;
   triage: ValidatedLiteratureTriage;
 }
 
@@ -211,6 +217,19 @@ export const DEFAULT_LITERATURE_REPORT_PROMPT = [
   'Every rendered factual claim must cite one or more evidenceIds exactly as supplied.',
   'Return only JSON that matches the requested schema.',
 ].join('\n');
+
+export interface LiteratureReportGenerationSteps {
+  scopeScanNotes: number;
+  evidenceRecords: number;
+  strictTriageSources: number;
+  strictTriageEvidence: number;
+  relaxedTriageSources: number;
+  relaxedTriageEvidence: number;
+  fallbackSelectedSources: number;
+  fallbackSelectedEvidence: number;
+  finalClaimsGenerated: number;
+  triageMode: LiteratureTriageMode;
+}
 
 export const OLLAMA_SYNTHESIS_PROMPT_SCHEMA = {
   type: 'object',
@@ -854,9 +873,14 @@ function requestMessages(system: string, prompt: string) {
   ];
 }
 
+function buildResearchQuestionSection(question: string): string {
+  return `Research question:\n${normalizeText(question) || 'No specific research question provided.'}`;
+}
+
 export function buildOllamaSynthesisPromptRequest({
   corpus,
   context,
+  researchQuestion,
   language,
   model,
   mode,
@@ -865,6 +889,7 @@ export function buildOllamaSynthesisPromptRequest({
   const prompt = [
     'Create a concise, project-specific synthesis prompt for a local literature synthesis report.',
     'The prompt must tell the synthesis model what information is relevant for this project/topic.',
+    buildResearchQuestionSection(researchQuestion),
     'Prioritize broad concept-level themes over paper-by-paper descriptions.',
     'It must also require cited claims using evidence IDs and must discourage summarizing every paper.',
     `Output language: ${language || DEFAULT_LITERATURE_REPORT_LANGUAGE}`,
@@ -892,6 +917,7 @@ export function buildOllamaSynthesisPromptRequest({
 export function buildOllamaSynthesisPromptRevisionRequest({
   corpus,
   context,
+  researchQuestion,
   language,
   model,
   mode,
@@ -901,6 +927,7 @@ export function buildOllamaSynthesisPromptRevisionRequest({
   const prompt = [
     'Revise the current synthesis prompt according to the user instruction.',
     'Keep the result project-specific, concise, and compatible with evidence-ID citation guardrails.',
+    buildResearchQuestionSection(researchQuestion),
     `Output language: ${language || DEFAULT_LITERATURE_REPORT_LANGUAGE}`,
     `Report mode: ${mode}`,
     `Scope: ${corpus.scopeProperty} = ${corpus.scopeValue}`,
@@ -926,10 +953,12 @@ export function buildOllamaSynthesisPromptRevisionRequest({
 export function buildOllamaLiteratureTriageRequest({
   corpus,
   context,
+  researchQuestion,
   synthesisPrompt,
   language,
   model,
   mode,
+  triageMode = 'strict',
 }: BuildOllamaLiteratureTriageRequestParams) {
   const limits = getLiteratureReportLimits(mode);
   const promptEvidence = capPromptEvidence(corpus, {
@@ -937,14 +966,19 @@ export function buildOllamaLiteratureTriageRequest({
     maxEvidence: Math.max(limits.maxEvidence * 2, limits.maxEvidence),
   });
   const prompt = [
+    buildResearchQuestionSection(researchQuestion),
     synthesisPrompt || DEFAULT_LITERATURE_REPORT_PROMPT,
-    'First triage the corpus. Select only sources and evidence records directly relevant to the project context and synthesis prompt.',
+    triageMode === 'strict'
+      ? 'First triage the corpus. Prioritize directly relevant sources and evidence for the research question and project context.'
+      : 'Relevance is uncertain; still return the top context-overlap sources and evidence for this research question, even if confidence is low.',
+    'If relevance is weak, include additional fallback candidates (mark them as lower relevance in the reason text) rather than returning none.',
     'Output at most one theme label per source, and favor themes that appear across multiple sources.',
     `Output language: ${language || DEFAULT_LITERATURE_REPORT_LANGUAGE}`,
     `Report mode: ${mode}`,
     `Theme cap: ${limits.maxThemes}`,
     `Select at most ${limits.maxSources} sources and ${limits.maxEvidence} evidence records.`,
     `Use at most ${limits.maxAnnotationsPerSource} annotations per source.`,
+    'Your output example shape should include evidence IDs like ["S1-abstract", "S1-annotation-1"] when they exist.',
     `Scope: ${corpus.scopeProperty} = ${corpus.scopeValue}`,
     'Project context:',
     contextForPrompt(context),
@@ -959,7 +993,7 @@ export function buildOllamaLiteratureTriageRequest({
     stream: false,
     format: OLLAMA_LITERATURE_TRIAGE_SCHEMA,
     messages: requestMessages(
-      'You produce strict JSON literature relevance triage. Use only supplied source and evidence IDs.',
+      `You produce strict JSON literature relevance triage. Use only supplied source and evidence IDs. For this step return at most ${limits.maxSources} sources and ${limits.maxEvidence} evidence records, preferring those most relevant to the research question.`,
       prompt
     ),
   };
@@ -968,6 +1002,7 @@ export function buildOllamaLiteratureTriageRequest({
 export function buildOllamaLiteratureSynthesisRequest({
   corpus,
   context,
+  researchQuestion,
   synthesisPrompt,
   language,
   model,
@@ -985,6 +1020,7 @@ export function buildOllamaLiteratureSynthesisRequest({
     selectedSourceIds.has(source.id)
   );
   const prompt = [
+    buildResearchQuestionSection(researchQuestion),
     synthesisPrompt || DEFAULT_LITERATURE_REPORT_PROMPT,
     'Write a project-centered literature synthesis, not a paper-by-paper summary.',
     'Return thematic bullet claims. Every claim must cite evidenceIds exactly as supplied.',
@@ -1147,6 +1183,70 @@ export function validateAiLiteratureTriage(
     selectedSources: cappedSources,
     selectedEvidenceIds,
     omittedSelectionCount,
+  };
+}
+
+export function buildFallbackLiteratureTriage(
+  corpus: LiteratureReportCorpus,
+  mode: LiteratureReportMode = DEFAULT_LITERATURE_REPORT_MODE
+): ValidatedLiteratureTriage {
+  const limits = getLiteratureReportLimits(mode);
+  const evidenceBySource = new Map<string, LiteratureEvidence[]>();
+
+  for (const item of corpus.evidence) {
+    const list = evidenceBySource.get(item.sourceId) || [];
+    list.push(item);
+    evidenceBySource.set(item.sourceId, list);
+  }
+
+  const sortedSources = [...corpus.sources].sort((a, b) => {
+    const score = sciteCitationCount(b) - sciteCitationCount(a);
+    if (score) return score;
+    return a.title.localeCompare(b.title);
+  });
+
+  const selectedSources: AiLiteratureTriageSource[] = [];
+  const selectedEvidenceIds: string[] = [];
+  const evidenceSeen = new Set<string>();
+  const annotationCounts = new Map<string, number>();
+
+  for (const source of sortedSources.slice(0, limits.maxSources)) {
+    const sourceEvidence = evidenceBySource.get(source.id) || [];
+    if (!sourceEvidence.length) continue;
+
+    const cappedIds: string[] = [];
+    for (const item of sourceEvidence) {
+      if (evidenceSeen.has(item.id)) continue;
+      if (item.kind === 'annotation') {
+        const count = annotationCounts.get(item.sourceId) || 0;
+        if (count >= limits.maxAnnotationsPerSource) continue;
+        annotationCounts.set(item.sourceId, count + 1);
+      }
+
+      evidenceSeen.add(item.id);
+      selectedEvidenceIds.push(item.id);
+      cappedIds.push(item.id);
+
+      if (selectedEvidenceIds.length >= limits.maxEvidence) break;
+    }
+
+    if (cappedIds.length) {
+      selectedSources.push({
+        sourceId: source.id,
+        relevanceScore: 0.1,
+        reason: 'Deterministic fallback for report continuity.',
+        theme: 'Relevance fallback',
+        evidenceIds: cappedIds,
+      });
+    }
+
+    if (selectedEvidenceIds.length >= limits.maxEvidence) break;
+  }
+
+  return {
+    selectedSources,
+    selectedEvidenceIds,
+    omittedSelectionCount: 0,
   };
 }
 
@@ -1321,6 +1421,7 @@ function renderInputsCallout({
   model,
   language,
   mode,
+  generationSteps,
   synthesisPrompt,
   contextFilePath,
   pastedContextUsed,
@@ -1341,6 +1442,14 @@ function renderInputsCallout({
     `> - Model: \`${model}\``,
     `> - Language: \`${language}\``,
     `> - Report mode: \`${mode}\``,
+    `> - Report triage mode: \`${generationSteps?.triageMode || 'strict'}\``,
+    '>',
+    '> **Generation steps**',
+    `> - Scope scan: ${generationSteps?.scopeScanNotes ?? corpus.sources.length} notes, ${generationSteps?.evidenceRecords ?? corpus.evidence.length} evidence records`,
+    `> - Triage strict: ${generationSteps?.strictTriageSources ?? 0} sources, ${generationSteps?.strictTriageEvidence ?? 0} evidence records`,
+    `> - Triage relaxed: ${generationSteps?.relaxedTriageSources ?? 0} sources, ${generationSteps?.relaxedTriageEvidence ?? 0} evidence records`,
+    `> - Triage fallback: ${generationSteps?.fallbackSelectedSources ?? 0} sources, ${generationSteps?.fallbackSelectedEvidence ?? 0} evidence records`,
+    `> - Final claims generated: ${generationSteps?.finalClaimsGenerated ?? 0}`,
     '>',
     '> **Synthesis prompt**',
     '>',
@@ -1538,6 +1647,7 @@ export function renderLiteratureSynthesisReport({
   corpus,
   synthesis,
   triage,
+  generationSteps,
   generatedAt,
   model,
   language,
@@ -1568,6 +1678,7 @@ export function renderLiteratureSynthesisReport({
     `zoteroReportModel: ${yamlString(model)}`,
     `zoteroReportLanguage: ${yamlString(language)}`,
     `zoteroReportMode: ${yamlString(mode)}`,
+    `zoteroReportTriageMode: ${yamlString(generationSteps?.triageMode || 'strict')}`,
     `zoteroReportGenerated: ${yamlString(formatDateTime(generatedAt))}`,
     `zoteroReportOmittedClaimCount: ${synthesis.omittedClaimCount}`,
     '---',
@@ -1589,7 +1700,7 @@ export function renderLiteratureSynthesisReport({
       synthesisPrompt,
       contextFilePath,
       pastedContextUsed,
-      reportTitle,
+      generationSteps,
     }),
     '',
     renderMainPapersSection(synthesis, triage, corpus, labels),
