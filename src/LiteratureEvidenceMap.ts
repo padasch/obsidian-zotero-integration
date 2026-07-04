@@ -18,6 +18,7 @@ export interface LiteratureReportSource {
   authors: string[];
   year: string;
   publication: string;
+  keywords: string[];
   doi: string;
   url: string;
   zoteroUri: string;
@@ -138,6 +139,15 @@ export interface RenderLiteratureSynthesisReportParams {
   reportTitle?: string;
 }
 
+export interface RenderLiteratureCompilationReportParams {
+  corpus: LiteratureReportCorpus;
+  generatedAt: Date;
+  mode: LiteratureReportMode;
+  contextFilePath?: string;
+  pastedContextUsed: boolean;
+  reportTitle?: string;
+}
+
 export interface BuildOllamaSynthesisPromptRequestParams {
   corpus: LiteratureReportCorpus;
   context: LiteratureReportContext;
@@ -217,6 +227,53 @@ export const DEFAULT_LITERATURE_REPORT_PROMPT = [
   'Every rendered factual claim must cite one or more evidenceIds exactly as supplied.',
   'Return only JSON that matches the requested schema.',
 ].join('\n');
+
+function buildReportFrontmatter(
+  corpus: LiteratureReportCorpus,
+  generatedAt: Date,
+  reportType: string,
+  mode: LiteratureReportMode,
+  contextFilePath: string | undefined,
+  pastedContextUsed: boolean,
+  model?: string,
+  language?: string,
+  omittedClaimCount?: number,
+  triageMode?: LiteratureTriageMode
+): string {
+  const frontmatter: string[] = [
+    '---',
+    'zoteroReport: true',
+    `zoteroReportType: ${yamlString(reportType)}`,
+    `zoteroReportSourceProperty: ${yamlString(corpus.scopeProperty)}`,
+    `zoteroReportSourceValue: ${yamlString(corpus.scopeValue)}`,
+    `zoteroReportSourceCount: ${corpus.sources.length}`,
+    `zoteroReportEvidenceCount: ${corpus.evidence.length}`,
+    `zoteroReportContextFile: ${yamlOptionalString(contextFilePath)}`,
+    `zoteroReportPastedContextUsed: ${pastedContextUsed ? 'true' : 'false'}`,
+    `zoteroReportGenerated: ${yamlString(formatDateTime(generatedAt))}`,
+  ];
+
+  if (model) {
+    frontmatter.push(`zoteroReportModel: ${yamlString(model)}`);
+  }
+
+  if (language) {
+    frontmatter.push(`zoteroReportLanguage: ${yamlString(language)}`);
+  }
+
+  frontmatter.push(`zoteroReportMode: ${yamlString(mode)}`);
+
+  if (triageMode) {
+    frontmatter.push(`zoteroReportTriageMode: ${yamlString(triageMode)}`);
+  }
+
+  if (typeof omittedClaimCount === 'number') {
+    frontmatter.push(`zoteroReportOmittedClaimCount: ${omittedClaimCount}`);
+  }
+
+  frontmatter.push('---');
+  return frontmatter.join('\n');
+}
 
 export interface LiteratureReportGenerationSteps {
   scopeScanNotes: number;
@@ -486,6 +543,22 @@ function cleanTitle(frontmatter: Record<string, unknown>, fallback: string) {
   );
 }
 
+function frontmatterKeywordValues(frontmatter: Record<string, unknown>): string[] {
+  const values = [
+    ...frontmatterValues(frontmatter.zoteroKeywords),
+    ...frontmatterValues(frontmatter.keywords),
+    ...frontmatterValues(frontmatter.zoteroTags),
+    ...frontmatterValues(frontmatter.tags),
+    ...frontmatterValues(frontmatter.tag),
+    ...frontmatterValues(frontmatter.allTags),
+    ...frontmatterValues(frontmatter.hashTags),
+    ...frontmatterValues(frontmatter.zoteroTag),
+    ...frontmatterValues(frontmatter.zoteroTagList),
+  ];
+
+  return uniqueValues(values);
+}
+
 function cleanAuthors(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.map((entry) => frontmatterText(entry)).filter(Boolean);
@@ -569,6 +642,7 @@ export function buildLiteratureReportSource(
       'publicationTitle',
       'publication',
     ]),
+    keywords: frontmatterKeywordValues(frontmatter),
     doi,
     url: zoteroUrl ? cleanHref(zoteroUrl) : doi ? `https://doi.org/${doi}` : '',
     zoteroUri: zoteroUri ? cleanHref(zoteroUri) : '',
@@ -1416,6 +1490,34 @@ function collectRenderedEvidenceIds(
   ];
 }
 
+function compileSourceEvidenceMap(
+  evidence: LiteratureEvidence[]
+): Map<string, LiteratureEvidence[]> {
+  const map = new Map<string, LiteratureEvidence[]>();
+  for (const item of evidence) {
+    const list = map.get(item.sourceId) || [];
+    list.push(item);
+    map.set(item.sourceId, list);
+  }
+  return map;
+}
+
+function renderInputsCalloutCommon(
+  corpus: LiteratureReportCorpus,
+  contextFilePath: string | undefined,
+  pastedContextUsed: boolean
+): string {
+  return [
+    '> [!info]- Inputs used',
+    `> - Source property: \`${corpus.scopeProperty}\``,
+    `> - Source value: \`${corpus.scopeValue}\``,
+    `> - Source notes scanned: ${corpus.sources.length}`,
+    `> - Evidence records extracted: ${corpus.evidence.length}`,
+    `> - Context file: ${contextFilePath ? `\`${contextFilePath}\`` : 'none'}`,
+    `> - Pasted context: ${pastedContextUsed ? 'yes' : 'no'}`,
+  ].join('\n');
+}
+
 function renderInputsCallout({
   corpus,
   model,
@@ -1432,13 +1534,7 @@ function renderInputsCallout({
     .join('\n');
 
   return [
-    '> [!info]- Inputs used',
-    `> - Source property: \`${corpus.scopeProperty}\``,
-    `> - Source value: \`${corpus.scopeValue}\``,
-    `> - Source notes scanned: ${corpus.sources.length}`,
-    `> - Evidence records extracted: ${corpus.evidence.length}`,
-    `> - Context file: ${contextFilePath ? `\`${contextFilePath}\`` : 'none'}`,
-    `> - Pasted context: ${pastedContextUsed ? 'yes' : 'no'}`,
+    renderInputsCalloutCommon(corpus, contextFilePath, pastedContextUsed),
     `> - Model: \`${model}\``,
     `> - Language: \`${language}\``,
     `> - Report mode: \`${mode}\``,
@@ -1643,6 +1739,99 @@ function renderFootnotes(
   return rows.length ? ['## Source Footnotes', '', ...rows].join('\n') : '';
 }
 
+function renderCompilationInputsCallout(
+  params: RenderLiteratureCompilationReportParams
+): string {
+  return renderInputsCalloutCommon(
+    params.corpus,
+    params.contextFilePath,
+    params.pastedContextUsed
+  );
+}
+
+function renderSourceKeywordsLine(source: LiteratureReportSource): string {
+  return source.keywords.length
+    ? source.keywords.join(', ')
+    : 'No keywords available';
+}
+
+function renderSourceCompilationSection(
+  source: LiteratureReportSource,
+  sourceEvidence: Map<string, LiteratureEvidence[]>,
+  index: number
+): string {
+  const annotations = (sourceEvidence.get(source.id) || []).filter(
+    (item) => item.kind === 'annotation'
+  );
+
+  const annotationLines = annotations.length
+    ? annotations.map(
+        (item, annotationIndex) =>
+          `    - Annotation ${annotationIndex + 1}: ${markdownEscape(item.text)}`
+      )
+    : ['    - No annotations extracted.'];
+
+  return [
+    `## ${source.citekey ? `@${source.citekey}` : `Paper ${index + 1}`} - ${source.title}`,
+    `- **Abstract:** ${source.abstractText || 'No abstract available.'}`,
+    `- **Keywords:** ${renderSourceKeywordsLine(source)}`,
+    '- **Annotations:**',
+    ...annotationLines,
+  ].join('\n');
+}
+
+function renderLiteratureCompilationSections(
+  corpus: LiteratureReportCorpus
+): string {
+  const sourceEvidence = compileSourceEvidenceMap(corpus.evidence);
+
+  return corpus.sources
+    .map((source, index) =>
+      renderSourceCompilationSection(source, sourceEvidence, index)
+    )
+    .join('\n\n');
+}
+
+export function renderLiteratureCompilationReport({
+  corpus,
+  generatedAt,
+  mode,
+  contextFilePath,
+  pastedContextUsed,
+  reportTitle,
+}: RenderLiteratureCompilationReportParams): string {
+  const titleText = normalizeText(reportTitle) || 'Collection';
+
+  const frontmatter = buildReportFrontmatter(
+    corpus,
+    generatedAt,
+    'literature-compilation',
+    mode,
+    contextFilePath,
+    pastedContextUsed
+  );
+
+  return [
+    frontmatter,
+    '',
+    `# ${titleText}`,
+    '',
+    renderCompilationInputsCallout({
+      corpus,
+      generatedAt,
+      mode,
+      contextFilePath,
+      pastedContextUsed,
+      reportTitle,
+    }),
+    '',
+    renderLiteratureCompilationSections(corpus),
+    '',
+  ]
+    .filter((section) => section !== '')
+    .join('\n');
+}
+
 export function renderLiteratureSynthesisReport({
   corpus,
   synthesis,
@@ -1665,24 +1854,18 @@ export function renderLiteratureSynthesisReport({
     mainPapers: deriveMainPapers(synthesis, triage),
   });
   const labels = buildFootnoteLabelMap(renderedEvidenceIds);
-  const frontmatter = [
-    '---',
-    'zoteroReport: true',
-    'zoteroReportType: "literature-synthesis"',
-    `zoteroReportSourceProperty: ${yamlString(corpus.scopeProperty)}`,
-    `zoteroReportSourceValue: ${yamlString(corpus.scopeValue)}`,
-    `zoteroReportSourceCount: ${corpus.sources.length}`,
-    `zoteroReportEvidenceCount: ${corpus.evidence.length}`,
-    `zoteroReportContextFile: ${yamlOptionalString(contextFilePath)}`,
-    `zoteroReportPastedContextUsed: ${pastedContextUsed ? 'true' : 'false'}`,
-    `zoteroReportModel: ${yamlString(model)}`,
-    `zoteroReportLanguage: ${yamlString(language)}`,
-    `zoteroReportMode: ${yamlString(mode)}`,
-    `zoteroReportTriageMode: ${yamlString(generationSteps?.triageMode || 'strict')}`,
-    `zoteroReportGenerated: ${yamlString(formatDateTime(generatedAt))}`,
-    `zoteroReportOmittedClaimCount: ${synthesis.omittedClaimCount}`,
-    '---',
-  ].join('\n');
+  const frontmatter = buildReportFrontmatter(
+    corpus,
+    generatedAt,
+    'literature-synthesis',
+    mode,
+    contextFilePath,
+    pastedContextUsed,
+    model,
+    language,
+    synthesis.omittedClaimCount,
+    generationSteps?.triageMode || 'strict'
+  );
 
   return [
     frontmatter,
@@ -1738,6 +1921,17 @@ export function buildLiteratureSynthesisReportFilename(
     sanitizeFilenamePart(scopeValue) ||
     'Literature Synthesis';
   return `${formatDateCompact(generatedAt)} - Zotero Synthesis - ${text}.md`;
+}
+
+export function buildLiteratureCompilationReportFilename(
+  descriptiveText: string,
+  scopeValue: string,
+  generatedAt: Date
+): string {
+  const text = sanitizeFilenamePart(descriptiveText) ||
+    sanitizeFilenamePart(scopeValue) ||
+    'Literature Collection';
+  return `${formatDateCompact(generatedAt)} - Zotero Collection - ${text}.md`;
 }
 
 export function renderLiteratureEvidenceMapReport(

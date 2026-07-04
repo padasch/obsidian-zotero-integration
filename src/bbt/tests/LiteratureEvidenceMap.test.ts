@@ -1,5 +1,6 @@
 import {
   buildLiteratureReportCorpus,
+  buildLiteratureCompilationReportFilename,
   buildLiteratureSynthesisReportFilename,
   buildOllamaLiteratureSynthesisRequest,
   buildOllamaLiteratureTriageRequest,
@@ -7,6 +8,7 @@ import {
   buildOllamaSynthesisPromptRevisionRequest,
   buildFallbackLiteratureTriage,
   frontmatterMatchesScope,
+  renderLiteratureCompilationReport,
   renderLiteratureSynthesisReport,
   validateAiLiteratureSynthesis,
   validateAiLiteratureTriage,
@@ -60,6 +62,7 @@ describe('buildLiteratureReportCorpus()', () => {
             zoteroSciteCitingPublications: 42,
             zoteroAbstract:
               'This abstract includes a comma, and should remain intact.',
+            zoteroKeywords: ['drought', 'canopy dynamics'],
           },
           markdown: [
             '# Canopy drought response',
@@ -92,6 +95,9 @@ describe('buildLiteratureReportCorpus()', () => {
       publication: 'Journal of Tree Water',
       sciteCitingPublications: 42,
     });
+    expect(corpus.sources[0].keywords).toEqual(
+      expect.arrayContaining(['drought', 'canopy dynamics'])
+    );
     expect(corpus.evidence.map((item) => item.id)).toEqual([
       'S1-abstract',
       'S1-annotation-1',
@@ -153,6 +159,18 @@ describe('buildLiteratureSynthesisReportFilename()', () => {
         new Date('2026-07-04T10:00:00.000Z')
       )
     ).toBe('20260704 - Zotero Synthesis - Forest Project.md');
+  });
+});
+
+describe('buildLiteratureCompilationReportFilename()', () => {
+  it('uses compact date, collection label, and sanitized descriptive text', () => {
+    expect(
+      buildLiteratureCompilationReportFilename(
+        'Drought: stress / forests?',
+        '[[Project A]]',
+        new Date('2026-07-04T10:00:00.000Z')
+      )
+    ).toBe('20260704 - Zotero Collection - Drought stress forests.md');
   });
 });
 
@@ -375,6 +393,56 @@ describe('renderLiteratureSynthesisReport()', () => {
     expect(markdown).not.toContain('## Evidence Index');
     expect(markdown).not.toContain('| ID |');
     expect(markdown).not.toContain('project context text');
+  });
+});
+
+describe('renderLiteratureCompilationReport()', () => {
+  it('renders a simple collection list with abstract, keywords, and annotations', () => {
+    const corpus = buildLiteratureReportCorpus(
+      [
+        {
+          path: 'Literature/@smith2026.md',
+          basename: '@smith2026',
+          frontmatter: {
+            zoteroProject: '[[Project A]]',
+            zoteroTitle: 'Drought paper',
+            citekey: 'smith2026',
+            zoteroYear: '2026',
+            zoteroKeywords: ['drought', 'water stress'],
+            zoteroAbstract: 'Drought abstract evidence.',
+          },
+          markdown: [
+            '## All Annotations',
+            '> [!annotation-yellow] Page 3 ([Ref](zotero://open-pdf/library/items/PDF123?page=3&annotation=XYZ))',
+            '> Annotation evidence one.',
+            '> [!annotation-yellow] Page 4 ([Ref](zotero://open-pdf/library/items/PDF123?page=4&annotation=ABC))',
+            '> Annotation evidence two.',
+          ].join('\n'),
+        },
+      ],
+      'zoteroProject',
+      '[[Project A]]'
+    );
+
+    const markdown = renderLiteratureCompilationReport({
+      corpus,
+      generatedAt: new Date('2026-07-04T10:00:00.000Z'),
+      mode: 'standard',
+      contextFilePath: 'Projects/Context.md',
+      pastedContextUsed: true,
+      reportTitle: 'Drought collection',
+    });
+
+    expect(markdown).toContain('zoteroReportType: "literature-compilation"');
+    expect(markdown).toContain('# Drought collection');
+    expect(markdown).toContain('> [!info]- Inputs used');
+    expect(markdown).toContain('## @smith2026 - Drought paper');
+    expect(markdown).toContain('- **Abstract:** Drought abstract evidence.');
+    expect(markdown).toContain('- **Keywords:** drought, water stress');
+    expect(markdown).toContain('- Annotation 1: Annotation evidence one.');
+    expect(markdown).toContain('- Annotation 2: Annotation evidence two.');
+    expect(markdown).not.toContain('## Key Synthesis');
+    expect(markdown).not.toContain('## Source Footnotes');
   });
 });
 

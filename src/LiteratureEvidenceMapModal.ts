@@ -23,6 +23,7 @@ import {
   LiteratureReportNoteRecord,
   LiteratureReportScopeProperty,
   buildLiteratureReportCorpus,
+  buildLiteratureCompilationReportFilename,
   buildLiteratureSynthesisReportFilename,
   buildOllamaLiteratureSynthesisRequest,
   buildOllamaLiteratureTriageRequest,
@@ -32,6 +33,7 @@ import {
   parseAiLiteratureSynthesisContent,
   parseAiLiteratureTriageContent,
   parseAiSynthesisPromptContent,
+  renderLiteratureCompilationReport,
   renderLiteratureSynthesisReport,
   validateAiLiteratureSynthesis,
   validateAiLiteratureTriage,
@@ -127,26 +129,27 @@ async function getUniqueReportPath(
   folder: string,
   descriptiveText: string,
   scopeValue: string,
-  generatedAt: Date
+  generatedAt: Date,
+  reportType: 'literature-synthesis' | 'literature-compilation'
 ): Promise<string> {
   const baseFolder = folder || DEFAULT_LITERATURE_REPORT_FOLDER;
-  const filename = buildLiteratureSynthesisReportFilename(
-    descriptiveText,
-    scopeValue,
-    generatedAt
-  );
+  const filenameFn =
+    reportType === 'literature-compilation'
+      ? buildLiteratureCompilationReportFilename
+      : buildLiteratureSynthesisReportFilename;
+  const filename = filenameFn(descriptiveText, scopeValue, generatedAt);
   const basePath = normalizePath(
     sanitizeFilePath(removeStartingSlash(`${baseFolder}/${filename}`))
   );
   let path = basePath;
   let index = 2;
   while (await app.vault.adapter.exists(path)) {
+    const nextFilename = filenameFn(descriptiveText, scopeValue, generatedAt).replace(
+      /\.md$/i,
+      ` ${index}.md`
+    );
     path = normalizePath(
-      sanitizeFilePath(
-        removeStartingSlash(
-          `${baseFolder}/${filename.replace(/\.md$/i, ` ${index}.md`)}`
-        )
-      )
+      sanitizeFilePath(removeStartingSlash(`${baseFolder}/${nextFilename}`))
     );
     index += 1;
   }
@@ -211,12 +214,15 @@ class LiteratureEvidenceMapModal extends Modal {
   };
   private contextFileEl: HTMLInputElement;
   private generateButton: HTMLButtonElement;
+  private generateCompilationButton: HTMLButtonElement;
   private generatePromptButton: HTMLButtonElement;
   private modeSelectEl: HTMLSelectElement;
   private pastedContextEl: HTMLTextAreaElement;
   private researchQuestionEl: HTMLTextAreaElement;
   private previewEl: HTMLTextAreaElement;
   private reportMarkdown = '';
+  private generatedReportType: 'literature-synthesis' | 'literature-compilation' =
+    'literature-synthesis';
   private revisePromptButton: HTMLButtonElement;
   private revisionInstructionEl: HTMLTextAreaElement;
   private saveButton: HTMLButtonElement;
@@ -244,9 +250,9 @@ class LiteratureEvidenceMapModal extends Modal {
 
     const container = this.contentEl.createDiv('zt-literature-report-modal');
     const header = container.createDiv('zt-literature-report-header');
-    header.createEl('h2', { text: 'Generate literature synthesis report' });
+    header.createEl('h2', { text: 'Generate literature reports' });
     header.createEl('p', {
-      text: 'Create a local Ollama synthesis from imported Zotero literature notes. Context guides relevance; only Zotero evidence IDs can support rendered claims.',
+      text: 'Create either an AI literature synthesis or a raw collection of abstracts and annotations for downstream prompts.',
     });
 
     const controls = container.createDiv('zt-literature-report-controls');
@@ -280,7 +286,15 @@ class LiteratureEvidenceMapModal extends Modal {
     this.generateButton.type = 'button';
     this.generateButton.addClass('mod-cta');
     this.generateButton.addEventListener('click', () => {
-      void this.generatePreview();
+      void this.generateSynthesisPreview();
+    });
+
+    this.generateCompilationButton = buttons.createEl('button', {
+      text: 'Generate collection compilation',
+    });
+    this.generateCompilationButton.type = 'button';
+    this.generateCompilationButton.addEventListener('click', () => {
+      void this.generateCompilationPreview();
     });
 
     this.saveButton = buttons.createEl('button', { text: 'Save report' });
@@ -698,7 +712,7 @@ class LiteratureEvidenceMapModal extends Modal {
     }
   }
 
-  private async generatePreview() {
+  private async generateSynthesisPreview() {
     if (!this.scopeValue) {
       this.setStatus('Choose a project or topic value first.');
       return;
@@ -856,6 +870,7 @@ class LiteratureEvidenceMapModal extends Modal {
         pastedContextUsed: !!context.pastedText,
         reportTitle: this.titleInputEl.value.trim(),
       });
+      this.generatedReportType = 'literature-synthesis';
       this.previewEl.value = this.reportMarkdown;
       this.saveButton.disabled = false;
       this.setStatus(
@@ -880,6 +895,63 @@ class LiteratureEvidenceMapModal extends Modal {
     }
   }
 
+  private async generateCompilationPreview() {
+    if (!this.scopeValue) {
+      this.setStatus('Choose a project or topic value first.');
+      return;
+    }
+
+    this.setBusy(true);
+    this.generateCompilationButton.textContent = 'Generating compilation...';
+    this.setStatus('Reading literature notes...');
+
+    try {
+      await this.yieldToUi();
+      const corpus = await this.loadCorpus();
+      if (!corpus.sources.length) {
+        this.setStatus('No matching Zotero literature notes found.');
+        return;
+      }
+
+      if (!corpus.evidence.length) {
+        this.setStatus(
+          'Matching notes did not contain abstracts or extractable annotation evidence.'
+        );
+        return;
+      }
+
+      const context = await this.getContext();
+      this.generatedAt = new Date();
+      this.generatedReportType = 'literature-compilation';
+      this.reportMarkdown = renderLiteratureCompilationReport({
+        corpus,
+        generatedAt: this.generatedAt,
+        mode: this.getMode(),
+        contextFilePath: context.filePath,
+        pastedContextUsed: !!context.pastedText,
+        reportTitle: this.titleInputEl.value.trim(),
+      });
+
+      this.previewEl.value = this.reportMarkdown;
+      this.saveButton.disabled = false;
+
+      this.setStatus(
+        `Compilation generated from ${corpus.sources.length} notes and ${corpus.evidence.length} evidence records.`
+      );
+    } catch (error) {
+      console.error(error);
+      this.setStatus(
+        error instanceof Error
+          ? error.message
+          : 'Failed to generate literature compilation report.'
+      );
+      new Notice('Failed to generate literature compilation report.', 10000);
+    } finally {
+      this.generateCompilationButton.textContent = 'Generate collection compilation';
+      this.setBusy(false);
+    }
+  }
+
   private async saveReport() {
     const markdown = this.reportMarkdown.trim();
     if (!markdown) return;
@@ -896,7 +968,8 @@ class LiteratureEvidenceMapModal extends Modal {
           DEFAULT_LITERATURE_REPORT_FOLDER,
         this.titleInputEl.value.trim(),
         this.scopeValue,
-        this.generatedAt || new Date()
+        this.generatedAt || new Date(),
+        this.generatedReportType
       );
 
       await mkMDDir(path);
@@ -904,14 +977,20 @@ class LiteratureEvidenceMapModal extends Modal {
       if (file instanceof TFile) {
         await this.app.workspace.getLeaf(true).openFile(file);
       }
-      new Notice(`Created literature synthesis report: ${path}`);
+      new Notice(
+        `Created literature ${
+          this.generatedReportType === 'literature-compilation'
+            ? 'collection compilation'
+            : 'synthesis'
+        } report: ${path}`
+      );
       this.close();
     } catch (error) {
       console.error(error);
       this.setStatus(
         error instanceof Error ? error.message : 'Failed to save report.'
       );
-      new Notice('Failed to save literature synthesis report.', 10000);
+      new Notice('Failed to save literature report.', 10000);
     } finally {
       this.saveButton.textContent = 'Save report';
       this.setBusy(false);
@@ -922,11 +1001,14 @@ class LiteratureEvidenceMapModal extends Modal {
     this.reportMarkdown = '';
     if (this.previewEl) this.previewEl.value = '';
     if (this.saveButton) this.saveButton.disabled = true;
+    this.generatedReportType = 'literature-synthesis';
+    this.generatedAt = null;
   }
 
   private setBusy(isBusy: boolean) {
     for (const button of [
       this.generateButton,
+      this.generateCompilationButton,
       this.generatePromptButton,
       this.revisePromptButton,
       this.saveButton,

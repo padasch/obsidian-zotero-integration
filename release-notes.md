@@ -1,5 +1,0 @@
-- Implement question-first literature synthesis pipeline with required research question input.
-- Add two-pass triage workflow: strict pass, relaxed pass, and deterministic fallback triage.
-- Surface explicit pipeline step log in status text and generated report metadata/callout.
-- Preserve citation guardrails: only validated evidence IDs are rendered and invalid claims are filtered.
-- Add prompt presets and robust fallback behavior so report generation no longer hard-fails on empty triage.
