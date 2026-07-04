@@ -182,7 +182,7 @@ function SettingsSection({
   description,
   children,
   collapsible = true,
-  defaultOpen = true,
+  defaultOpen = false,
   level = 2,
 }: React.PropsWithChildren<{
   title: string;

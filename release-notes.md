@@ -1,0 +1,5 @@
+- Add prompt-builder kit presets to literature synthesis modal (theme-first, mechanistic, methods/evidence, knowledge gaps)
+- Strengthen literature synthesis prompt workflow for theme-first condensation and reduced per-paper enumeration
+- Add theme count limits by mode and enforce them in synthesis validation
+- Keep report settings section collapsed by default in plugin settings
+- Improve prompt controls UX in literature synthesis modal

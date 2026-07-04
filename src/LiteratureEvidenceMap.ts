@@ -63,6 +63,7 @@ export interface LiteratureReportLimits {
   maxAnnotationsPerSource: number;
   maxBulletsPerTheme: number;
   maxEvidenceRefsPerBullet: number;
+  maxThemes: number;
 }
 
 export interface AiEvidenceClaim {
@@ -180,6 +181,7 @@ export const LITERATURE_REPORT_MODE_LIMITS: Record<
     maxAnnotationsPerSource: 3,
     maxBulletsPerTheme: 3,
     maxEvidenceRefsPerBullet: 2,
+    maxThemes: 4,
   },
   standard: {
     maxSources: 30,
@@ -187,6 +189,7 @@ export const LITERATURE_REPORT_MODE_LIMITS: Record<
     maxAnnotationsPerSource: 5,
     maxBulletsPerTheme: 5,
     maxEvidenceRefsPerBullet: 3,
+    maxThemes: 6,
   },
   detailed: {
     maxSources: 50,
@@ -194,14 +197,17 @@ export const LITERATURE_REPORT_MODE_LIMITS: Record<
     maxAnnotationsPerSource: 8,
     maxBulletsPerTheme: 8,
     maxEvidenceRefsPerBullet: 4,
+    maxThemes: 9,
   },
 };
 
 export const DEFAULT_LITERATURE_REPORT_PROMPT = [
   'Create a project-centered literature synthesis from the supplied local Zotero evidence records.',
   'Use the project context only to decide relevance and structure; do not cite it as evidence.',
+  'Consolidate findings into major themes rather than summarizing each paper.',
+  'Prioritize cross-paper mechanisms, consistencies, tensions, and methods relevant to the prompt.',
+  'Keep theme count deliberately small and only cover evidence with strong relevance.',
   'Do not summarize every paper. Select only evidence directly relevant to the synthesis prompt.',
-  'Prefer fewer, stronger thematic claims over exhaustive coverage.',
   'Every rendered factual claim must cite one or more evidenceIds exactly as supplied.',
   'Return only JSON that matches the requested schema.',
 ].join('\n');
@@ -859,9 +865,11 @@ export function buildOllamaSynthesisPromptRequest({
   const prompt = [
     'Create a concise, project-specific synthesis prompt for a local literature synthesis report.',
     'The prompt must tell the synthesis model what information is relevant for this project/topic.',
+    'Prioritize broad concept-level themes over paper-by-paper descriptions.',
     'It must also require cited claims using evidence IDs and must discourage summarizing every paper.',
     `Output language: ${language || DEFAULT_LITERATURE_REPORT_LANGUAGE}`,
     `Report mode: ${mode}`,
+    `Theme cap: ${limits.maxThemes} themes`,
     `Scope: ${corpus.scopeProperty} = ${corpus.scopeValue}`,
     `Default caps: ${limits.maxSources} papers, ${limits.maxEvidence} evidence records, ${limits.maxBulletsPerTheme} bullets per theme.`,
     'Project context:',
@@ -931,8 +939,10 @@ export function buildOllamaLiteratureTriageRequest({
   const prompt = [
     synthesisPrompt || DEFAULT_LITERATURE_REPORT_PROMPT,
     'First triage the corpus. Select only sources and evidence records directly relevant to the project context and synthesis prompt.',
+    'Output at most one theme label per source, and favor themes that appear across multiple sources.',
     `Output language: ${language || DEFAULT_LITERATURE_REPORT_LANGUAGE}`,
     `Report mode: ${mode}`,
+    `Theme cap: ${limits.maxThemes}`,
     `Select at most ${limits.maxSources} sources and ${limits.maxEvidence} evidence records.`,
     `Use at most ${limits.maxAnnotationsPerSource} annotations per source.`,
     `Scope: ${corpus.scopeProperty} = ${corpus.scopeValue}`,
@@ -978,6 +988,9 @@ export function buildOllamaLiteratureSynthesisRequest({
     synthesisPrompt || DEFAULT_LITERATURE_REPORT_PROMPT,
     'Write a project-centered literature synthesis, not a paper-by-paper summary.',
     'Return thematic bullet claims. Every claim must cite evidenceIds exactly as supplied.',
+    `Return no more than ${limits.maxThemes} named themes.`,
+    'Themes should be high-level and each theme should combine insights from multiple sources where possible.',
+    'Prefer synthesis statements, then tensions and open questions, rather than isolated findings.',
     'Also return mainPapers when a paper is important in this context. Main-paper reasons must cite evidenceIds.',
     `Output language: ${language || DEFAULT_LITERATURE_REPORT_LANGUAGE}`,
     `Report mode: ${mode}`,
@@ -1179,6 +1192,7 @@ export function validateAiLiteratureSynthesis(
           },
         ];
       })
+    .slice(0, limits.maxThemes)
     : [];
 
   const mainPapers = Array.isArray(raw.mainPapers)

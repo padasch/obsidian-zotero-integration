@@ -1038,6 +1038,26 @@ h3.zt-settings-section-title {
   padding-top: var(--size-4-1);
 }
 
+.zt-literature-report-prompt-presets-help {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  margin: 0;
+}
+
+.zt-literature-report-prompt-kit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-2);
+}
+
+.zt-literature-report-prompt-kit button {
+  border-radius: var(--radius-s);
+  box-shadow: none;
+  height: auto;
+  min-height: 0;
+  padding: 0.32rem 0.65rem;
+}
+
 .zt-literature-report-field label,
 .zt-literature-report-field-wide label,
 .zt-literature-report-preview label {

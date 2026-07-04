@@ -40,6 +40,12 @@ import type ZoteroConnector from './main';
 import { openMarkdownOrBaseFilePicker } from './settings/select.helpers';
 
 type ScopeValuesByProperty = Record<LiteratureReportScopeProperty, string[]>;
+type PromptPreset = {
+  id: string;
+  name: string;
+  description: string;
+  prompt: string;
+};
 
 function getMarkdownRecords(app: App): LiteratureReportNoteRecord[] {
   return app.vault.getMarkdownFiles().flatMap((file) => {
@@ -73,6 +79,39 @@ function corpusPreview(corpus: LiteratureReportCorpus): string {
 
   return `${corpus.sources.length} notes, ${abstracts} abstracts, ${annotations} annotations, ${sciteSources} with scite citation counts`;
 }
+
+const PROMPT_PRESETS: PromptPreset[] = [
+  {
+    id: 'theme-first',
+    name: 'Theme-first synthesis',
+    description: 'Prioritize cross-paper themes and conceptual integration.',
+    prompt:
+      'Create a project-centered synthesis around 4-6 major themes. Synthesize findings across papers and compare patterns, methods, and mechanisms rather than describing papers one by one.',
+  },
+  {
+    id: 'mechanistic',
+    name: 'Mechanistic focus',
+    description: 'Emphasize causal pathways and process explanations.',
+    prompt:
+      'Prioritize mechanistic or causal explanations and how evidence converges on shared processes. Output themes that explicitly connect evidence to causal mechanisms relevant to the project context.',
+  },
+  {
+    id: 'methods',
+    name: 'Methods and evidence quality',
+    description:
+      'Surface methodological patterns and strengths/limitations behind claims.',
+    prompt:
+      'Group findings by methodological pattern and claim type. Prefer synthesis statements that compare methods and indicate where uncertainty and caveats are shared across papers.',
+  },
+  {
+    id: 'gaps',
+    name: 'Knowledge gaps',
+    description:
+      'Highlight open questions and under-represented aspects for this topic.',
+    prompt:
+      'After major synthesis themes, add a dedicated gap section with likely next questions and missing evidence types. Keep claims evidence-linked and avoid listing papers.',
+  },
+];
 
 async function getUniqueReportPath(
   app: App,
@@ -342,6 +381,25 @@ class LiteratureEvidenceMapModal extends Modal {
   }
 
   private renderPromptControls(container: HTMLDivElement) {
+    const presetField = container.createDiv(
+      'zt-literature-report-field-wide zt-literature-report-prompt-presets'
+    );
+    presetField.createEl('label', { text: 'Prompt builder kit' });
+    const presetDescription = presetField.createEl('p');
+    presetDescription.textContent =
+      'Pick a starter template, then edit the prompt text as needed.';
+    presetDescription.addClass('zt-literature-report-prompt-presets-help');
+    const presetActions = presetField.createDiv('zt-literature-report-prompt-kit');
+    for (const preset of PROMPT_PRESETS) {
+      const presetButton = presetActions.createEl('button');
+      presetButton.type = 'button';
+      presetButton.textContent = preset.name;
+      presetButton.title = preset.description;
+      presetButton.addEventListener('click', () => {
+        this.applyPromptPreset(preset);
+      });
+    }
+
     const promptField = container.createDiv('zt-literature-report-field-wide');
     promptField.createEl('label', { text: 'Synthesis prompt' });
     this.synthesisPromptEl = promptField.createEl('textarea');
@@ -378,6 +436,13 @@ class LiteratureEvidenceMapModal extends Modal {
     this.revisePromptButton.addEventListener('click', () => {
       void this.reviseSynthesisPrompt();
     });
+  }
+
+  private applyPromptPreset(preset: PromptPreset) {
+    const promptText = `${preset.prompt}\n\n${DEFAULT_LITERATURE_REPORT_PROMPT}`;
+    this.synthesisPromptEl.value = promptText;
+    this.clearPreview();
+    this.setStatus(`Applied prompt preset: ${preset.name}.`);
   }
 
   private renderScopeValueOptions() {
