@@ -23,6 +23,10 @@ export interface LiteratureReportSource {
   zoteroUri: string;
   readerHref: string;
   sciteCitingPublications?: number;
+  sciteSupporting?: number;
+  sciteContradicting?: number;
+  sciteMentioning?: number;
+  sciteTotalStatements?: number;
   sciteUrl: string;
   abstractText: string;
   scopeValues: string[];
@@ -631,6 +635,18 @@ export function buildLiteratureReportSource(
     readerHref: readerHref ? openPdfPageOne(cleanHref(readerHref)) : '',
     sciteCitingPublications: firstFrontmatterNumber(frontmatter, [
       'zoteroSciteCitingPublications',
+    ]),
+    sciteSupporting: firstFrontmatterNumber(frontmatter, [
+      'zoteroSciteSupporting',
+    ]),
+    sciteContradicting: firstFrontmatterNumber(frontmatter, [
+      'zoteroSciteContradicting',
+    ]),
+    sciteMentioning: firstFrontmatterNumber(frontmatter, [
+      'zoteroSciteMentioning',
+    ]),
+    sciteTotalStatements: firstFrontmatterNumber(frontmatter, [
+      'zoteroSciteTotalStatements',
     ]),
     sciteUrl: cleanHref(firstFrontmatterText(frontmatter, ['zoteroSciteURL'])),
     abstractText: firstFrontmatterText(frontmatter, [
@@ -1742,11 +1758,60 @@ function annotationLink(item: LiteratureEvidence): string {
   return markdownLink('annotation', item.href || item.sourcePath);
 }
 
+function styleSciteMetric(value: number, color: string): string {
+  return `<span style="color: ${color};">${value}</span>`;
+}
+
+function renderSciteScoreLine(source: LiteratureReportSource): string | null {
+  const totalMentions =
+    source.sciteTotalStatements ??
+    source.sciteMentioning ??
+    source.sciteCitingPublications ??
+    null;
+
+  if (totalMentions === null) {
+    return null;
+  }
+
+  const details = [
+    source.sciteSupporting !== undefined
+      ? `supporting: ${styleSciteMetric(source.sciteSupporting, 'var(--text-success)')}`
+      : '',
+    source.sciteContradicting !== undefined
+      ? `contrasting: ${styleSciteMetric(source.sciteContradicting, 'var(--text-error)')}`
+      : '',
+  ].filter(Boolean);
+
+  return `- **Scite Score:** ${totalMentions} mentions${
+    details.length ? ` [${details.join(', ')}]` : ''
+  }`;
+}
+
+function renderSourceLinksLine(source: LiteratureReportSource): string | null {
+  const links: string[] = [];
+  if (source.url) links.push(markdownLink('URL', source.url));
+  if (source.zoteroUri) links.push(markdownLink('Zotero Item', source.zoteroUri));
+  if (source.readerHref) links.push(markdownLink('Zotero PDF', source.readerHref));
+
+  if (!links.length) return null;
+  return `- **Links:** ${links.join(', ')}`;
+}
+
+function sourceCollectionLabel(
+  source: LiteratureReportSource,
+  index: number
+): string {
+  return `${source.citekey ? `@${source.citekey}` : `Paper ${index + 1}`} - ${
+    source.title
+  }`;
+}
+
 function renderSourceCompilationSection(
   source: LiteratureReportSource,
   sourceEvidence: Map<string, LiteratureEvidence[]>,
   index: number
 ): string {
+  const sourceLabel = sourceCollectionLabel(source, index);
   const annotations = (sourceEvidence.get(source.id) || []).filter(
     (item) => item.kind === 'annotation'
   );
@@ -1759,12 +1824,40 @@ function renderSourceCompilationSection(
           )}`
       )
     : ['    1. No annotations extracted.'];
+  const sciteLine = renderSciteScoreLine(source);
+  const linksLine = renderSourceLinksLine(source);
 
-  return [
-    `## ${source.citekey ? `@${source.citekey}` : `Paper ${index + 1}`} - ${source.title}`,
+    return [
+    `## ${sourceLabel}`,
     `- **Abstract:** ${source.abstractText || 'No abstract available.'}`,
+    ...(sciteLine ? [sciteLine] : []),
+    ...(linksLine ? [linksLine] : []),
     '- **Annotations:**',
     ...annotationLines,
+  ].join('\n');
+}
+
+function renderCompilationNoInformationSection(
+  corpus: LiteratureReportCorpus
+): string {
+  const sourceEvidence = compileSourceEvidenceMap(corpus.evidence);
+  const noInformationSources = corpus.sources
+    .map((source, index) => ({ source, index }))
+    .filter(({ source }) => {
+      const items = sourceEvidence.get(source.id) || [];
+      const hasAbstract = normalizeText(source.abstractText).length > 0;
+      const hasAnnotations = items.some((item) => item.kind === 'annotation');
+      return !hasAbstract && !hasAnnotations;
+    });
+
+  if (!noInformationSources.length) return '';
+
+  return [
+    '## Sources with no extracted information',
+    '',
+    ...noInformationSources.map(
+      ({ source, index }) => `- ${sourceCollectionLabel(source, index)}`
+    ),
   ].join('\n');
 }
 
@@ -1804,6 +1897,8 @@ export function renderLiteratureCompilationReport({
     '',
     `# ${titleText}`,
     '',
+    renderCompilationNoInformationSection(corpus),
+    '',
     renderCompilationInputsCallout({
       corpus,
       generatedAt,
@@ -1812,7 +1907,6 @@ export function renderLiteratureCompilationReport({
       pastedContextUsed,
       reportTitle,
     }),
-    '',
     renderLiteratureCompilationSections(corpus),
     '',
   ]

@@ -405,6 +405,13 @@ describe('renderLiteratureCompilationReport()', () => {
             citekey: 'smith2026',
             zoteroYear: '2026',
             zoteroAbstract: 'Drought abstract evidence.',
+            zoteroURL: 'https://example.com/paper',
+            zoteroURI: 'zotero://select/library/items/ABC123',
+            zoteroReader: 'zotero://open-pdf/library/items/PDF123',
+            zoteroSciteCitingPublications: 88,
+            zoteroSciteSupporting: 72,
+            zoteroSciteContradicting: 9,
+            zoteroSciteTotalStatements: 168,
           },
           markdown: [
             '## All Annotations',
@@ -413,6 +420,16 @@ describe('renderLiteratureCompilationReport()', () => {
             '> [!annotation-yellow] Page 4 ([Ref](zotero://open-pdf/library/items/PDF123?page=4&annotation=ABC))',
             '> Annotation evidence two.',
           ].join('\n'),
+        },
+        {
+          path: 'Literature/@nopaper.md',
+          basename: '@nopaper',
+          frontmatter: {
+            zoteroProject: '[[Project A]]',
+            zoteroTitle: 'No info paper',
+            citekey: 'nopaper2026',
+          },
+          markdown: '_No abstract, no annotations._',
         },
       ],
       'zoteroProject',
@@ -434,11 +451,19 @@ describe('renderLiteratureCompilationReport()', () => {
     expect(markdown).toContain('## @smith2026 - Drought paper');
     expect(markdown).toContain('- **Abstract:** Drought abstract evidence.');
     expect(markdown).toContain(
+      '- **Scite Score:** 168 mentions [supporting: <span style="color: var(--text-success);">72</span>, contrasting: <span style="color: var(--text-error);">9</span>]'
+    );
+    expect(markdown).toContain(
+      '- **Links:** [URL](https://example.com/paper), [Zotero Item](zotero://select/library/items/ABC123), [Zotero PDF](zotero://open-pdf/library/items/PDF123?page=1)'
+    );
+    expect(markdown).toContain(
       '1. [annotation p. 3](zotero://open-pdf/library/items/PDF123?page=3&annotation=XYZ): Annotation evidence one.'
     );
     expect(markdown).toContain(
       '2. [annotation p. 4](zotero://open-pdf/library/items/PDF123?page=4&annotation=ABC): Annotation evidence two.'
     );
+    expect(markdown).toContain('## Sources with no extracted information');
+    expect(markdown).toContain('- @nopaper2026 - No info paper');
     expect(markdown).not.toContain('No keywords available');
     expect(markdown).not.toContain('## Key Synthesis');
     expect(markdown).not.toContain('## Source Footnotes');
