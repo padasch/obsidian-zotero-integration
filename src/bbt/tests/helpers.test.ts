@@ -1,4 +1,5 @@
 import {
+  getDuplicateCitekeyCandidatePath,
   getPort,
   mkMDDir,
   replaceIllegalChars,
@@ -94,6 +95,32 @@ describe('sanitizeFilePath()', () => {
     expect(replaceIllegalChars('?')).toBe('');
     expect(replaceIllegalChars(':')).toBe('-');
     expect(replaceIllegalChars('*hello?')).toBe('hello');
+  });
+});
+
+describe('getDuplicateCitekeyCandidatePath()', () => {
+  it('maps a Better BibTeX a-suffixed citekey note to the unsuffixed note path', () => {
+    expect(
+      getDuplicateCitekeyCandidatePath('Literature/@smith2024a.md', 'smith2024a')
+    ).toBe('Literature/@smith2024.md');
+  });
+
+  it('returns null for citekeys that do not end with a', () => {
+    expect(
+      getDuplicateCitekeyCandidatePath('Literature/@smith2024.md', 'smith2024')
+    ).toBeNull();
+  });
+
+  it('returns null when the citekey is not part of the note filename', () => {
+    expect(
+      getDuplicateCitekeyCandidatePath('Literature/Some title.md', 'smith2024a')
+    ).toBeNull();
+  });
+
+  it('handles bare filename imports', () => {
+    expect(getDuplicateCitekeyCandidatePath('@smith2024a.md', 'smith2024a')).toBe(
+      '@smith2024.md'
+    );
   });
 });
 

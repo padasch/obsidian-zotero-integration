@@ -18,6 +18,7 @@ import { CiteKey, getCiteKeyFromAny, getCiteKeys } from './cayw';
 import { processZoteroAnnotationNotes } from './exportNotes';
 import { extractAnnotations } from './extractAnnotations';
 import {
+  getDuplicateCitekeyCandidatePath,
   getColorCategory,
   getLocalURI,
   mkMDDir,
@@ -772,6 +773,43 @@ async function refreshSciteMetadataOnImport(
   }
 }
 
+async function confirmNoDuplicateCitekeyNote(
+  markdownPath: string,
+  item: any,
+  settings: ZoteroConnectorSettings
+): Promise<boolean> {
+  if (settings.zoteroDuplicateCitekeyCheckEnabled === false) return true;
+
+  const citekey =
+    item?.citekey ||
+    item?.citationKey ||
+    item?.['citation-key'] ||
+    getCiteKeyFromAny(item)?.key;
+  const duplicateCandidatePath = getDuplicateCitekeyCandidatePath(
+    markdownPath,
+    citekey
+  );
+
+  if (!duplicateCandidatePath) return true;
+
+  const duplicateFile = app.vault.getAbstractFileByPath(
+    duplicateCandidatePath
+  );
+  if (!(duplicateFile instanceof TFile)) return true;
+
+  const baseCitekey = String(citekey).slice(0, -1);
+  const modal = new ConfirmationModal(
+    app,
+    'Possible duplicate Zotero literature note',
+    `The citekey "${citekey}" looks like a Better BibTeX duplicate of "${baseCitekey}". A note already exists at "${duplicateCandidatePath}". Import "${markdownPath}" anyway?`,
+    'Import anyway',
+    'Skip import'
+  );
+  modal.open();
+
+  return modal.waitForResult();
+}
+
 export async function exportToMarkdown(
   params: ExportToMarkdownParams,
   explicitCiteKeys?: CiteKey[]
@@ -1037,6 +1075,19 @@ export async function exportToMarkdown(
           }
         }
       } else {
+        const shouldCreate = await confirmNoDuplicateCitekeyNote(
+          markdownPath,
+          item,
+          settings
+        );
+        if (!shouldCreate) {
+          new Notice(
+            `Skipped possible duplicate Zotero literature note "${markdownPath}".`,
+            7000
+          );
+          continue;
+        }
+
         await mkMDDir(markdownPath);
         const createdFile = await app.vault.create(markdownPath, rendered);
         await writeManagedProperties(createdFile, params.managedProperties);

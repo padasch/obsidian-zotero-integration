@@ -269,6 +269,8 @@ function SettingsComponent({
   const [openNoteAfterImportState, setOpenNoteAfterImport] = React.useState(
     !!settings.openNoteAfterImport
   );
+  const [duplicateCitekeyCheckEnabled, setDuplicateCitekeyCheckEnabled] =
+    React.useState(settings.zoteroDuplicateCitekeyCheckEnabled !== false);
 
   const [ocrState, setOCRState] = React.useState(settings.pdfExportImageOCR);
 
@@ -598,6 +600,22 @@ function SettingsComponent({
               <Icon name="lucide-folder-search" />
             </button>
           </div>
+        </SettingItem>
+        <SettingItem
+          name="Check duplicate Zotero citekey suffixes"
+          description="Before creating a new note, warn when a citekey ending in 'a' would create a note next to an existing unsuffixed citekey note, for example @smith2024a.md when @smith2024.md already exists."
+        >
+          <div
+            onClick={() => {
+              setDuplicateCitekeyCheckEnabled((state) => {
+                updateSetting('zoteroDuplicateCitekeyCheckEnabled', !state);
+                return !state;
+              });
+            }}
+            className={`checkbox-container${
+              duplicateCitekeyCheckEnabled ? ' is-enabled' : ''
+            }`}
+          />
         </SettingItem>
         <SettingItem
           name="Open notes after import"

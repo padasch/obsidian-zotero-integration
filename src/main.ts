@@ -104,6 +104,7 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   openFileAfterImportPath: '',
   openNoteAfterImport: false,
   whichNotesToOpenAfterImport: 'first-imported-note',
+  zoteroDuplicateCitekeyCheckEnabled: true,
   zoteroPreservedProperties: [],
   zoteroTaskAnnotationColors: ['Purple', 'Magenta', 'Gray'],
   zoteroMonitorEnabled: false,

@@ -142,6 +142,7 @@ export interface ZoteroConnectorSettings {
   settingsVersion?: number;
   shouldConcat?: boolean;
   whichNotesToOpenAfterImport: NotesToOpenAfterImport;
+  zoteroDuplicateCitekeyCheckEnabled?: boolean;
   zoteroPreservedProperties?: string[];
   zoteroTaskAnnotationColors?: string[];
   zoteroMonitorEnabled?: boolean;

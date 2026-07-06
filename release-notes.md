@@ -1,3 +1,3 @@
-- Keep literature synthesis/collection reports from auto-selecting scope value; a scope is now required before generation.
-- Start source scope with a "Select a value" placeholder and a dedicated prompt to choose a project/topic.
-- Add clearer status text when scope value is missing.
+- Add an enabled-by-default duplicate citekey check for new Zotero literature notes.
+- Warn before importing a Better BibTeX `a`-suffixed citekey note when the unsuffixed note already exists.
+- Add a settings toggle and helper tests for the duplicate-citekey path detection.

@@ -39,6 +39,37 @@ export function sanitizeFilePath(filePath: string) {
   return path.join(dir, `${name}${parsed.ext}`);
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function getDuplicateCitekeyCandidatePath(
+  markdownPath: string,
+  citekey: string
+): string | null {
+  const cleanedCitekey = String(citekey || '').trim();
+  if (!cleanedCitekey.endsWith('a')) return null;
+
+  const baseCitekey = cleanedCitekey.slice(0, -1);
+  if (!baseCitekey) return null;
+
+  const normalizedPath = String(markdownPath || '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+  if (!normalizedPath) return null;
+
+  const parsed = path.posix.parse(normalizedPath);
+  const nextName = parsed.name.replace(
+    new RegExp(escapeRegExp(cleanedCitekey), 'g'),
+    baseCitekey
+  );
+
+  if (nextName === parsed.name) return null;
+
+  return path.posix.join(parsed.dir, `${nextName}${parsed.ext}`);
+}
+
 function hexToHSL(str: string) {
   let rStr = '0',
     gStr = '0',
