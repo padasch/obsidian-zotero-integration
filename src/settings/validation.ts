@@ -36,6 +36,7 @@ export const KNOWN_ZOTERO_PROPERTY_KEYS = [
   'zoteroKey',
   'zoteroCollections',
   'zoteroCitekey',
+  'zoteroCitekeyLink',
   'zoteroCiteKey',
   'zoteroDateAdded',
   'zoteroDateModified',

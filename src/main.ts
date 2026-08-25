@@ -38,6 +38,7 @@ import {
   CiteKeyExport,
   ExportFormat,
   ZoteroConnectorSettings,
+  ZoteroMonitorRecentScopeMode,
 } from './types';
 
 const commandPrefix = 'obsidian-zotero-desktop-connector:';
@@ -111,11 +112,16 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   zoteroMonitorCheckOnStartup: false,
   zoteroMonitorIntervalMinutes: 0,
   zoteroMonitorAutomaticAction: 'notice',
+  zoteroMonitorRecentScopeMode: 'days',
+  zoteroMonitorRecentScopeValue: 30,
   zoteroMonitorRecentDays: 30,
   zoteroMonitorLibraryScope: [],
   zoteroMonitorCollectionScope: [],
   zoteroMonitorTagScope: [],
   zoteroMonitorImportFormat: '',
+  zoteroAutoImportEnabled: false,
+  zoteroAutoImportNote: 'Automatically imported',
+  zoteroAutoImportStatus: 'new',
   zoteroItemTableColumns: DEFAULT_ZOTERO_ITEM_TABLE_COLUMNS.slice(),
   zoteroOrphanedProperty: 'zoteroOrphaned',
   zoteroSciteApiToken: '',
@@ -155,6 +161,41 @@ function isLegacyDefaultCitationCommand(format: CitationFormat): boolean {
     (format.name === 'Citation' && format.format === 'formatted-citation') ||
     (format.name === 'Bibliography' && format.format === 'formatted-bibliography')
   );
+}
+
+function migrateMonitorRecentScope(
+  loadedSettings: Partial<ZoteroConnectorSettings>,
+  mergedSettings: ZoteroConnectorSettings
+) {
+  if (loadedSettings.zoteroMonitorRecentScopeMode) {
+    return;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      loadedSettings,
+      'zoteroMonitorRecentDays'
+    )
+  ) {
+    const legacyDays = Number(loadedSettings.zoteroMonitorRecentDays);
+    if (
+      loadedSettings.zoteroMonitorRecentDays === null ||
+      !Number.isFinite(legacyDays) ||
+      legacyDays <= 0
+    ) {
+      mergedSettings.zoteroMonitorRecentScopeMode = 'all';
+      mergedSettings.zoteroMonitorRecentScopeValue = 0;
+    } else {
+      mergedSettings.zoteroMonitorRecentScopeMode = 'days';
+      mergedSettings.zoteroMonitorRecentScopeValue = legacyDays;
+    }
+    return;
+  }
+
+  mergedSettings.zoteroMonitorRecentScopeMode =
+    DEFAULT_SETTINGS.zoteroMonitorRecentScopeMode as ZoteroMonitorRecentScopeMode;
+  mergedSettings.zoteroMonitorRecentScopeValue =
+    DEFAULT_SETTINGS.zoteroMonitorRecentScopeValue;
 }
 
 export default class ZoteroConnector extends Plugin {
@@ -446,6 +487,13 @@ export default class ZoteroConnector extends Plugin {
     mergedSettings.zoteroLiteratureReportPrompt =
       mergedSettings.zoteroLiteratureReportPrompt ||
       DEFAULT_LITERATURE_REPORT_PROMPT;
+    mergedSettings.zoteroAutoImportNote =
+      mergedSettings.zoteroAutoImportNote ||
+      DEFAULT_SETTINGS.zoteroAutoImportNote;
+    mergedSettings.zoteroAutoImportStatus =
+      mergedSettings.zoteroAutoImportStatus ||
+      DEFAULT_SETTINGS.zoteroAutoImportStatus;
+    migrateMonitorRecentScope(loadedSettings, mergedSettings);
     delete mergedSettings.zoteroMonitorTableColumns;
 
     this.settings = mergedSettings;

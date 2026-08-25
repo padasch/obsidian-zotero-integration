@@ -1,6 +1,7 @@
 import type {
   CiteKeyExport,
   ZoteroMonitorItem,
+  ZoteroMonitorRecentScopeMode,
   ZoteroMonitorScope,
 } from './types';
 
@@ -241,22 +242,83 @@ export function groupItemsByLibrary(
   return grouped;
 }
 
-export function filterItemsByRecentDays(
+function getMonitorItemDate(item: ZoteroMonitorItem): number {
+  const added = Date.parse(item.dateAdded || '');
+  if (!Number.isNaN(added)) return added;
+
+  const modified = Date.parse(item.dateModified || '');
+  return Number.isNaN(modified) ? Number.NaN : modified;
+}
+
+export function filterItemsByRecentScope(
   items: ZoteroMonitorItem[],
-  recentDays: number | null | undefined
+  mode: ZoteroMonitorRecentScopeMode | undefined,
+  value: number | null | undefined
 ): ZoteroMonitorItem[] {
-  const asNumber = Number(recentDays);
-  if (!recentDays || !Number.isFinite(asNumber) || asNumber <= 0) {
+  const normalizedMode = mode || 'days';
+  const asNumber = Number(value);
+
+  if (normalizedMode === 'all') {
+    return items;
+  }
+
+  if (normalizedMode === 'today') {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const cutoff = start.getTime();
+
+    return items.filter((item) => {
+      const itemDate = getMonitorItemDate(item);
+      return !Number.isNaN(itemDate) && itemDate >= cutoff;
+    });
+  }
+
+  if (normalizedMode === 'latest') {
+    if (!Number.isFinite(asNumber) || asNumber <= 0) return [];
+
+    return items
+      .map((item) => ({ item, itemDate: getMonitorItemDate(item) }))
+      .filter(({ itemDate }) => !Number.isNaN(itemDate))
+      .sort((a, b) => b.itemDate - a.itemDate)
+      .slice(0, asNumber)
+      .map(({ item }) => item);
+  }
+
+  if (!Number.isFinite(asNumber) || asNumber <= 0) {
     return items;
   }
 
   const cutoff = Date.now() - asNumber * 24 * 60 * 60 * 1000;
 
   return items.filter((item) => {
-    const modified = Date.parse(item.dateModified || item.dateAdded || '');
-    if (Number.isNaN(modified)) return false;
-    return modified >= cutoff;
+    const itemDate = getMonitorItemDate(item);
+    return !Number.isNaN(itemDate) && itemDate >= cutoff;
   });
+}
+
+export function describeMonitorRecentScope(
+  mode: ZoteroMonitorRecentScopeMode | undefined,
+  value: number | null | undefined
+): string {
+  const normalizedMode = mode || 'days';
+  const asNumber = Number(value);
+
+  if (normalizedMode === 'all') return 'all time';
+  if (normalizedMode === 'today') return 'today';
+  if (normalizedMode === 'latest') {
+    const count = Number.isFinite(asNumber) && asNumber > 0 ? asNumber : 0;
+    return `latest ${count} Zotero item${count === 1 ? '' : 's'}`;
+  }
+
+  if (!Number.isFinite(asNumber) || asNumber <= 0) return 'all time';
+  return `last ${asNumber} day${asNumber === 1 ? '' : 's'}`;
+}
+
+export function filterItemsByRecentDays(
+  items: ZoteroMonitorItem[],
+  recentDays: number | null | undefined
+): ZoteroMonitorItem[] {
+  return filterItemsByRecentScope(items, 'days', recentDays);
 }
 
 export function filterItemsByScope(

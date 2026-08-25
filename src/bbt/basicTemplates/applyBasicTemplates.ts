@@ -28,7 +28,7 @@ const pdfZoteroLinkTemplate = `
 {%- if attachments and attachments.length > 0 -%}
 {%- set file = attachments | filterby("path", "endswith", ".pdf") | first -%}
 {%- if file and file.path and file.path.endsWith(".pdf") -%}
-	[{{file.title}}]({{file.desktopURI}})
+	[{{file.title}}]({{file.pdfURI or file.desktopURI}})
 {%- endif -%}
 {%- endif -%}
 `;

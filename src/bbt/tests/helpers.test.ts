@@ -5,7 +5,14 @@ import {
   replaceIllegalChars,
   sanitizeFilePath,
 } from '../helpers';
-import { getItemCollectionPaths } from '../../ZoteroMonitor.helpers';
+import {
+  filterItemsByRecentScope,
+  getItemCollectionPaths,
+} from '../../ZoteroMonitor.helpers';
+import {
+  createZoteroCitekeyLink,
+  sortFrontmatterProperties,
+} from '../../ZoteroManagedProperties';
 
 describe('getPort()', () => {
   it('returns correct port for database', () => {
@@ -144,5 +151,120 @@ describe('getItemCollectionPaths()', () => {
         collections: 'topics, topics//coding, topics/coding/r',
       })
     ).toEqual(['topics/coding/r']);
+  });
+});
+
+describe('filterItemsByRecentScope()', () => {
+  const realNow = Date.now;
+
+  beforeEach(() => {
+    Date.now = jest.fn(() => new Date('2026-08-25T12:00:00Z').getTime());
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-25T12:00:00Z'));
+  });
+
+  afterEach(() => {
+    Date.now = realNow;
+    jest.useRealTimers();
+  });
+
+  const items = [
+    {
+      title: 'today',
+      citekey: 'today',
+      libraryID: 1,
+      dateAdded: '2026-08-25T08:00:00Z',
+      item: {},
+    },
+    {
+      title: 'week',
+      citekey: 'week',
+      libraryID: 1,
+      dateAdded: '2026-08-21T08:00:00Z',
+      item: {},
+    },
+    {
+      title: 'old',
+      citekey: 'old',
+      libraryID: 1,
+      dateAdded: '2026-07-01T08:00:00Z',
+      item: {},
+    },
+  ];
+
+  it('filters items added today using the local day boundary', () => {
+    expect(filterItemsByRecentScope(items, 'today', 0).map((item) => item.citekey)).toEqual([
+      'today',
+    ]);
+  });
+
+  it('filters items added within the last N days', () => {
+    expect(filterItemsByRecentScope(items, 'days', 7).map((item) => item.citekey)).toEqual([
+      'today',
+      'week',
+    ]);
+  });
+
+  it('selects the newest N items by date added', () => {
+    expect(filterItemsByRecentScope(items, 'latest', 2).map((item) => item.citekey)).toEqual([
+      'today',
+      'week',
+    ]);
+  });
+});
+
+describe('createZoteroCitekeyLink()', () => {
+  it('prefers a Zotero PDF reader link', () => {
+    expect(
+      createZoteroCitekeyLink({
+        citationKey: 'smith2026',
+        url: 'https://example.com/paper',
+        desktopURI: 'zotero://select/library/items/ABC123',
+        attachments: [
+          {
+            path: '/tmp/paper.pdf',
+            pdfURI: 'zotero://open-pdf/library/items/PDF123',
+          },
+        ],
+      })
+    ).toBe('[@smith2026](zotero://open-pdf/library/items/PDF123)');
+  });
+
+  it('falls back to web URL, Zotero item URI, then plain citekey', () => {
+    expect(
+      createZoteroCitekeyLink({
+        citationKey: 'smith2026',
+        url: 'https://example.com/paper',
+        desktopURI: 'zotero://select/library/items/ABC123',
+      })
+    ).toBe('[@smith2026](https://example.com/paper)');
+
+    expect(
+      createZoteroCitekeyLink({
+        citationKey: 'smith2026',
+        desktopURI: 'zotero://select/library/items/ABC123',
+      })
+    ).toBe('[@smith2026](zotero://select/library/items/ABC123)');
+
+    expect(createZoteroCitekeyLink({ citationKey: 'smith2026' })).toBe(
+      '@smith2026'
+    );
+  });
+});
+
+describe('sortFrontmatterProperties()', () => {
+  it('sorts keys alphabetically in place', () => {
+    const frontmatter = {
+      zoteroStatus: 'new',
+      aliases: ['@smith2026: Title'],
+      zoteroCitekey: 'smith2026',
+    };
+
+    sortFrontmatterProperties(frontmatter);
+
+    expect(Object.keys(frontmatter)).toEqual([
+      'aliases',
+      'zoteroCitekey',
+      'zoteroStatus',
+    ]);
   });
 });

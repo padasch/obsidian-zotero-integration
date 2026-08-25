@@ -18,7 +18,8 @@ import {
   ZOTERO_ITEM_TABLE_COLUMN_BY_KEY,
 } from './ZoteroItemTable.columns';
 import {
-  filterItemsByRecentDays,
+  describeMonitorRecentScope,
+  filterItemsByRecentScope,
   filterItemsByScope,
   filterMissingZoteroItems,
   getItemCollectionPaths,
@@ -74,6 +75,15 @@ type MatchedLiteratureNote = ExistingLiteratureNote & {
 };
 type OrphanedLiteratureNote = ExistingLiteratureNote & {
   reason: string;
+};
+type MonitorImportOptions = {
+  nonInteractive?: boolean;
+  openAfterImport?: boolean;
+  suppressNotices?: boolean;
+};
+type MonitorImportResult = {
+  paths: string[];
+  skipped: number;
 };
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -1581,6 +1591,24 @@ export class ZoteroMonitor {
     await this.runCheck(true);
   }
 
+  async runAutoImportNow() {
+    if (this.checkInProgress || this.modalOpen) return;
+
+    this.checkInProgress = true;
+    try {
+      const missing = await this.getMissingItems(true);
+
+      if (!missing.length) {
+        new Notice('No missing Zotero literature notes found.');
+        return;
+      }
+
+      await this.safeAutoImportItems(missing);
+    } finally {
+      this.checkInProgress = false;
+    }
+  }
+
   async runDirectImport() {
     new ZoteroDirectImportRequestModal(this.plugin.app, async (value) => {
       const items = await this.getRequestedImportItems(value);
@@ -1771,6 +1799,11 @@ export class ZoteroMonitor {
         return;
       }
 
+      if (!manual && this.plugin.settings.zoteroAutoImportEnabled) {
+        await this.safeAutoImportItems(missing);
+        return;
+      }
+
       if (!manual && this.plugin.settings.zoteroMonitorAutomaticAction === 'notice') {
         this.showMissingItemsNotice(missing);
         return;
@@ -1793,11 +1826,14 @@ export class ZoteroMonitor {
     this.lastNoticeKey = noticeKey;
     const notice = new Notice('', 0);
 
-    const recentDays = this.plugin.settings.zoteroMonitorRecentDays;
+    const recentScopeLabel = describeMonitorRecentScope(
+      this.plugin.settings.zoteroMonitorRecentScopeMode,
+      this.plugin.settings.zoteroMonitorRecentScopeValue
+    );
     const windowLabel =
-      !recentDays || recentDays <= 0
+      recentScopeLabel === 'all time'
         ? 'for all time'
-        : `from the last ${recentDays} day${recentDays === 1 ? '' : 's'}`;
+        : `from ${recentScopeLabel}`;
 
     notice.noticeEl.empty();
     notice.noticeEl.createDiv('zt-monitor-notice-message').setText(
@@ -1829,20 +1865,13 @@ export class ZoteroMonitor {
     ignoreBtn.type = 'button';
 
     backgroundBtn.addEventListener('click', async () => {
-      const managedProperties: ZoteroManagedUserProperties = {
-        zoteroProject: [],
-        zoteroTopic: [],
-        zoteroNote: '',
-        zoteroStatus: 'new',
-      };
-
       openBtn.disabled = true;
       backgroundBtn.disabled = true;
       ignoreBtn.disabled = true;
       backgroundBtn.setText('Importing...');
 
       try {
-        await this.importItems(missing, managedProperties);
+        await this.safeAutoImportItems(missing);
         notice.hide();
       } catch (e) {
         openBtn.disabled = false;
@@ -1979,6 +2008,48 @@ export class ZoteroMonitor {
     );
   }
 
+  private getAutoImportManagedProperties(): ZoteroManagedUserProperties {
+    return {
+      zoteroProject: [],
+      zoteroTopic: [],
+      zoteroNote:
+        this.plugin.settings.zoteroAutoImportNote || 'Automatically imported',
+      zoteroStatus: this.plugin.settings.zoteroAutoImportStatus || 'new',
+    };
+  }
+
+  private async safeAutoImportItems(
+    items: ZoteroMonitorItem[]
+  ): Promise<MonitorImportResult> {
+    const result = await this.importItems(
+      items,
+      this.getAutoImportManagedProperties(),
+      {
+        nonInteractive: true,
+        openAfterImport: false,
+        suppressNotices: true,
+      }
+    );
+
+    const parts = [];
+    if (result.paths.length) {
+      parts.push(
+        `Imported ${result.paths.length} Zotero literature note${
+          result.paths.length === 1 ? '' : 's'
+        }`
+      );
+    }
+    if (result.skipped) {
+      parts.push(`skipped ${result.skipped}`);
+    }
+
+    if (parts.length) {
+      new Notice(`${parts.join(', ')}.`);
+    }
+
+    return result;
+  }
+
   private getOrphanedProperty(): string {
     return (
       this.plugin.settings.zoteroOrphanedProperty ||
@@ -2003,7 +2074,10 @@ export class ZoteroMonitor {
       title,
       description,
       filterSummary,
-      (selectedItems, properties) => this.importItems(selectedItems, properties),
+      async (selectedItems, properties) => {
+        const result = await this.importItems(selectedItems, properties);
+        return result.paths;
+      },
       () => {
         this.modalOpen = false;
       },
@@ -2164,7 +2238,6 @@ export class ZoteroMonitor {
   private getFilterSummary(): string[] {
     const settings = this.plugin.settings;
     const scope = this.getScope();
-    const recentDays = settings.zoteroMonitorRecentDays;
     const exportFormatName =
       settings.zoteroMonitorImportFormat ||
       settings.exportFormats[0]?.name ||
@@ -2173,9 +2246,10 @@ export class ZoteroMonitor {
       values.length ? `${label}: ${values.join(', ')}` : `${label}: all`;
 
     return [
-      recentDays === null || recentDays === undefined || recentDays <= 0
-        ? 'Time window: all time'
-        : `Time window: last ${recentDays} day${recentDays === 1 ? '' : 's'}`,
+      `Recent item scope: ${describeMonitorRecentScope(
+        settings.zoteroMonitorRecentScopeMode,
+        settings.zoteroMonitorRecentScopeValue
+      )}`,
       describeScope('Libraries', scope.libraryScope),
       describeScope('Collections', scope.collectionScope),
       describeScope('Tags', scope.tagScope),
@@ -2187,9 +2261,10 @@ export class ZoteroMonitor {
     const items = await this.getMonitorItems(manual);
     if (!items.length) return [];
 
-    const recent = filterItemsByRecentDays(
+    const recent = filterItemsByRecentScope(
       items,
-      this.plugin.settings.zoteroMonitorRecentDays
+      this.plugin.settings.zoteroMonitorRecentScopeMode,
+      this.plugin.settings.zoteroMonitorRecentScopeValue
     );
 
     const scope = this.getScope();
@@ -2299,16 +2374,18 @@ export class ZoteroMonitor {
 
   private async importItems(
     items: ZoteroMonitorItem[],
-    managedProperties: ZoteroManagedUserProperties
-  ): Promise<string[]> {
+    managedProperties: ZoteroManagedUserProperties,
+    options: MonitorImportOptions = {}
+  ): Promise<MonitorImportResult> {
     const exportFormat = this.getMonitorExportFormat();
 
     if (!exportFormat) {
       new Notice('No Zotero import format selected for the monitor.', 10000);
-      return [];
+      return { paths: [], skipped: items.length };
     }
 
     const createdOrUpdatedPaths: string[] = [];
+    let skipped = 0;
     const database = this.getDatabase();
 
     for (const [libraryID, libraryItems] of groupItemsByLibrary(items).entries()) {
@@ -2318,6 +2395,11 @@ export class ZoteroMonitor {
           database,
           exportFormat,
           managedProperties,
+          nonInteractive: options.nonInteractive,
+          suppressNotices: options.suppressNotices,
+          onSkip: () => {
+            skipped += 1;
+          },
         },
         libraryItems.map((item) => ({
           key: item.citekey,
@@ -2328,12 +2410,15 @@ export class ZoteroMonitor {
       createdOrUpdatedPaths.push(...paths);
     }
 
-    await this.plugin.openNotes(createdOrUpdatedPaths);
+    if (options.openAfterImport !== false) {
+      await this.plugin.openNotes(createdOrUpdatedPaths);
+    }
+
     if (createdOrUpdatedPaths.length) {
       this.removeItemsFromCache(items);
     }
 
-    if (createdOrUpdatedPaths.length) {
+    if (!options.suppressNotices && createdOrUpdatedPaths.length) {
       new Notice(
         `Imported ${createdOrUpdatedPaths.length} Zotero literature note${
           createdOrUpdatedPaths.length === 1 ? '' : 's'
@@ -2341,6 +2426,6 @@ export class ZoteroMonitor {
       );
     }
 
-    return createdOrUpdatedPaths;
+    return { paths: createdOrUpdatedPaths, skipped };
   }
 }

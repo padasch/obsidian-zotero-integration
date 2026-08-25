@@ -32,6 +32,7 @@ import {
   CitationFormat,
   ExportFormat,
   ZoteroConnectorSettings,
+  ZoteroMonitorRecentScopeMode,
 } from '../types';
 import { AssetDownloader } from './AssetDownloader';
 import { CiteFormatSettings } from './CiteFormatSettings';
@@ -55,6 +56,7 @@ interface SettingsComponentProps {
   removeExportFormat: (index: number) => ExportFormat[];
   updateSetting: (key: keyof ZoteroConnectorSettings, value: any) => void;
   runZoteroMonitorCheck: () => void;
+  runZoteroAutoImport: () => void;
 }
 
 function splitLineInput(value: string): string[] {
@@ -258,6 +260,7 @@ function SettingsComponent({
   removeExportFormat,
   updateSetting,
   runZoteroMonitorCheck,
+  runZoteroAutoImport,
 }: SettingsComponentProps) {
   const [citeFormatState, setCiteFormatState] = React.useState(
     settings.citeFormats
@@ -283,6 +286,15 @@ function SettingsComponent({
   const [zoteroMonitorStartup, setZoteroMonitorStartup] = React.useState(
     !!settings.zoteroMonitorCheckOnStartup
   );
+
+  const [zoteroAutoImportEnabled, setZoteroAutoImportEnabled] = React.useState(
+    !!settings.zoteroAutoImportEnabled
+  );
+
+  const [zoteroMonitorRecentScopeMode, setZoteroMonitorRecentScopeMode] =
+    React.useState<ZoteroMonitorRecentScopeMode>(
+      settings.zoteroMonitorRecentScopeMode || 'days'
+    );
 
   const [zoteroSciteEnabled, setZoteroSciteEnabled] = React.useState(
     !!settings.zoteroSciteEnabled
@@ -533,7 +545,7 @@ function SettingsComponent({
   return (
     <div className="zt-settings-root">
       <SettingsSection
-        title="Import basics"
+        title="Import - Basics"
         description="Connection and default behavior for importing Zotero notes."
       >
         <SettingsSubheading
@@ -575,8 +587,8 @@ function SettingsComponent({
           </SettingItem>
         ) : null}
         <SettingsSubheading
-          title="Import behavior"
-          description="Where imported notes go and what Obsidian opens after an import finishes."
+          title="Import defaults"
+          description="Where imported notes go and which format is used by monitor-driven imports."
         />
         <SettingItem
           name="Note Import Location"
@@ -600,6 +612,28 @@ function SettingsComponent({
               <Icon name="lucide-folder-search" />
             </button>
           </div>
+        </SettingItem>
+        <SettingItem
+          name="Monitor import format"
+          description="Import format used by missing-note imports, safe autoimport, and updates. Leave blank to use the first import format."
+        >
+          <select
+            className="dropdown"
+            defaultValue={settings.zoteroMonitorImportFormat || ''}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroMonitorImportFormat',
+                (e.target as HTMLSelectElement).value
+              )
+            }
+          >
+            <option value="">First import format</option>
+            {exportFormatState.map((format, index) => (
+              <option key={index} value={format.name}>
+                {format.name}
+              </option>
+            ))}
+          </select>
         </SettingItem>
         <SettingItem
           name="Check duplicate Zotero citekey suffixes"
@@ -699,7 +733,7 @@ function SettingsComponent({
       <SettingsDivider />
 
       <SettingsSection
-        title="Metadata and properties"
+        title="Import - Properties"
         description="Frontmatter behavior and shared Zotero item table display."
       >
         <SettingsSubheading
@@ -808,7 +842,312 @@ function SettingsComponent({
       <SettingsDivider />
 
       <SettingsSection
-        title="scite metadata"
+        title="Import - Behavior"
+        description="Missing-reference checks, safe autoimport, and maintenance commands."
+      >
+        <SettingsSubheading
+          title="Missing-reference monitor"
+          description="Find Zotero items that do not yet have Obsidian literature-note properties."
+        />
+        <SettingItem
+          name="Enable Zotero monitor"
+          description="Check Zotero for recently added citekeyed items that are missing Obsidian literature-note properties."
+        >
+          <div
+            onClick={() => {
+              setZoteroMonitorEnabled((state) => {
+                updateSetting('zoteroMonitorEnabled', !state);
+                return !state;
+              });
+            }}
+            className={`checkbox-container${
+              zoteroMonitorEnabled ? ' is-enabled' : ''
+            }`}
+          />
+        </SettingItem>
+        <SettingItem
+          name="Automatic check behavior"
+          description="Choose what happens when safe autoimport is off and a background check finds missing Zotero references."
+        >
+          <select
+            className="dropdown"
+            defaultValue={settings.zoteroMonitorAutomaticAction}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroMonitorAutomaticAction',
+                (e.target as HTMLSelectElement).value as any
+              )
+            }
+          >
+            <option value="notice">Show notice</option>
+            <option value="modal">Open import modal</option>
+          </select>
+        </SettingItem>
+        <SettingsSubheading
+          title="Safe autoimport"
+          description="Create missing notes in the background with default properties. Existing notes and possible duplicates are skipped."
+        />
+        <SettingItem
+          name="Enable safe autoimport"
+          description="When the monitor runs on startup or interval, create missing literature notes with the defaults below instead of only notifying."
+        >
+          <div
+            onClick={() => {
+              setZoteroAutoImportEnabled((state) => {
+                updateSetting('zoteroAutoImportEnabled', !state);
+                return !state;
+              });
+            }}
+            className={`checkbox-container${
+              zoteroAutoImportEnabled ? ' is-enabled' : ''
+            }`}
+          />
+        </SettingItem>
+        <SettingItem
+          name="Autoimport status"
+          description="zoteroStatus assigned to notes created by safe autoimport."
+        >
+          <input
+            type="text"
+            spellCheck={false}
+            defaultValue={settings.zoteroAutoImportStatus || 'new'}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroAutoImportStatus',
+                (e.target as HTMLInputElement).value.trim() || 'new'
+              )
+            }
+          />
+        </SettingItem>
+        <SettingItem
+          name="Autoimport note"
+          description="zoteroNote assigned to notes created by safe autoimport."
+        >
+          <input
+            type="text"
+            spellCheck={false}
+            defaultValue={
+              settings.zoteroAutoImportNote || 'Automatically imported'
+            }
+            onChange={(e) =>
+              updateSetting(
+                'zoteroAutoImportNote',
+                (e.target as HTMLInputElement).value.trim()
+              )
+            }
+          />
+        </SettingItem>
+        <SettingsSubheading
+          title="Schedule"
+          description="When Obsidian should check Zotero for missing references."
+        />
+        <SettingItem
+          name="Check when Obsidian starts"
+          description="Run the monitor after the workspace loads. The monitor must also be enabled."
+        >
+          <div
+            onClick={() => {
+              setZoteroMonitorStartup((state) => {
+                updateSetting('zoteroMonitorCheckOnStartup', !state);
+                return !state;
+              });
+            }}
+            className={`checkbox-container${
+              zoteroMonitorStartup ? ' is-enabled' : ''
+            }`}
+          />
+        </SettingItem>
+        <SettingItem
+          name="Check interval"
+          description="Minutes between automatic checks. Use 0 to disable recurring checks."
+        >
+          <input
+            min="0"
+            type="number"
+            defaultValue={settings.zoteroMonitorIntervalMinutes.toString()}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroMonitorIntervalMinutes',
+                Number((e.target as HTMLInputElement).value)
+              )
+            }
+          />
+        </SettingItem>
+        <SettingItem
+          name="Recent Zotero items"
+          description="Choose which Zotero items are eligible for missing-note checks and safe autoimport."
+        >
+          <div className="zt-picker-field">
+            <select
+              className="dropdown"
+              value={zoteroMonitorRecentScopeMode}
+              onChange={(e) => {
+                const value = (e.target as HTMLSelectElement)
+                  .value as ZoteroMonitorRecentScopeMode;
+                setZoteroMonitorRecentScopeMode(value);
+                updateSetting('zoteroMonitorRecentScopeMode', value);
+              }}
+            >
+              <option value="today">Today</option>
+              <option value="days">Last N days</option>
+              <option value="latest">Latest N items</option>
+              <option value="all">All time</option>
+            </select>
+            <input
+              min="0"
+              type="number"
+              disabled={
+                zoteroMonitorRecentScopeMode === 'today' ||
+                zoteroMonitorRecentScopeMode === 'all'
+              }
+              placeholder={
+                zoteroMonitorRecentScopeMode === 'latest' ? '20' : '30'
+              }
+              defaultValue={
+                settings.zoteroMonitorRecentScopeValue?.toString() || ''
+              }
+              onChange={(e) =>
+                updateSetting(
+                  'zoteroMonitorRecentScopeValue',
+                  Number((e.target as HTMLInputElement).value)
+                )
+              }
+            />
+          </div>
+        </SettingItem>
+        <SettingsSubheading
+          title="Scope filters"
+          description="Optional Zotero library, collection, and tag filters."
+        />
+        <SettingItem
+          name="Libraries or groups"
+          description="Optional comma-separated Zotero library IDs or library/group names. Leave blank for all libraries."
+        >
+          <input
+            type="text"
+            spellCheck={false}
+            placeholder="1, My Group Library"
+            defaultValue={formatScopeInput(settings.zoteroMonitorLibraryScope)}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroMonitorLibraryScope',
+                splitScopeInput((e.target as HTMLInputElement).value)
+              )
+            }
+          />
+        </SettingItem>
+        <SettingItem
+          name="Collection paths"
+          description="Optional comma-separated exact Zotero collection paths, such as Reading/Queue."
+        >
+          <input
+            type="text"
+            spellCheck={false}
+            placeholder="Reading/Queue"
+            defaultValue={formatScopeInput(
+              settings.zoteroMonitorCollectionScope
+            )}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroMonitorCollectionScope',
+                splitScopeInput((e.target as HTMLInputElement).value)
+              )
+            }
+          />
+        </SettingItem>
+        <SettingItem
+          name="Tags"
+          description="Optional comma-separated exact Zotero tags. Leave blank for all tags."
+        >
+          <input
+            type="text"
+            spellCheck={false}
+            placeholder="to-read, paper"
+            defaultValue={formatScopeInput(settings.zoteroMonitorTagScope)}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroMonitorTagScope',
+                splitScopeInput((e.target as HTMLInputElement).value)
+              )
+            }
+          />
+        </SettingItem>
+        <SettingsSubheading
+          title="Manual maintenance"
+          description="Run the same monitor workflow immediately."
+        />
+        <SettingItem
+          name="Find missing Zotero notes"
+          description="Open the review modal for Zotero items that match the scope above and are missing from Obsidian."
+        >
+          <button onClick={runZoteroMonitorCheck}>Check now</button>
+        </SettingItem>
+        <SettingItem
+          name="Import missing now with defaults"
+          description="Create missing notes with the safe autoimport defaults above. Existing notes and possible duplicates are skipped."
+        >
+          <button onClick={runZoteroAutoImport}>Import missing</button>
+        </SettingItem>
+      </SettingsSection>
+
+      <SettingsDivider />
+
+      <SettingsSection
+        title="Templates - Import Format"
+        description="Templates and output paths used by Zotero import commands."
+      >
+        <SettingItem
+          name="Add import format"
+          description="Create another Zotero import command with its own output paths and template."
+        >
+          <button onClick={addExport} className="mod-cta">
+            Add Import Format
+          </button>
+        </SettingItem>
+        {exportFormatState.map((f, i) => {
+          return (
+            <ExportFormatSettings
+              key={exportFormatState.length - i}
+              format={f}
+              index={i}
+              updateFormat={updateExport}
+              removeFormat={removeExport}
+            />
+          );
+        })}
+      </SettingsSection>
+
+      <SettingsDivider />
+
+      <SettingsSection
+        title="Templates - Citation"
+        description="Commands that insert formatted citations or rendered citation templates."
+      >
+        <SettingItem
+          name="Add citation format"
+          description="Create another command for inserting citations, bibliographies, or citation templates."
+        >
+          <button onClick={addCite} className="mod-cta">
+            Add Citation Format
+          </button>
+        </SettingItem>
+        {citeFormatState.map((f, i) => {
+          return (
+            <CiteFormatSettings
+              key={i}
+              format={f}
+              index={i}
+              updateFormat={updateCite}
+              removeFormat={removeCite}
+            />
+          );
+        })}
+      </SettingsSection>
+
+      <SettingsDivider />
+
+      <SettingsSection
+        title="Extra - scite Data"
         description="Optional citation-statement tallies for imported literature notes."
         collapsible
         defaultOpen={!!settings.zoteroSciteEnabled}
@@ -866,194 +1205,7 @@ function SettingsComponent({
       <SettingsDivider />
 
       <SettingsSection
-        title="Missing references and monitor"
-        description="Find recent Zotero items that do not yet have Obsidian literature-note properties."
-      >
-        <SettingsSubheading
-          title="Review workflow"
-          description="Manual review and import behavior for Zotero items not yet represented by Obsidian notes."
-        />
-        <SettingItem
-          name="Enable Zotero monitor"
-          description="Check Zotero for recently added citekeyed items that are missing Obsidian literature-note properties."
-        >
-          <div
-            onClick={() => {
-              setZoteroMonitorEnabled((state) => {
-                updateSetting('zoteroMonitorEnabled', !state);
-                return !state;
-              });
-            }}
-            className={`checkbox-container${
-              zoteroMonitorEnabled ? ' is-enabled' : ''
-            }`}
-          />
-        </SettingItem>
-        <SettingItem
-          name="Automatic check behavior"
-          description="Choose what happens when a background check finds missing Zotero references."
-        >
-          <select
-            className="dropdown"
-            defaultValue={settings.zoteroMonitorAutomaticAction}
-            onChange={(e) =>
-              updateSetting(
-                'zoteroMonitorAutomaticAction',
-                (e.target as HTMLSelectElement).value as any
-              )
-            }
-          >
-            <option value="notice">Show notice</option>
-            <option value="modal">Open import modal</option>
-          </select>
-        </SettingItem>
-        <SettingItem
-          name="Monitor import format"
-          description="Import format used by missing-note imports and updates. Leave blank to use the first import format."
-        >
-          <select
-            className="dropdown"
-            defaultValue={settings.zoteroMonitorImportFormat || ''}
-            onChange={(e) =>
-              updateSetting(
-                'zoteroMonitorImportFormat',
-                (e.target as HTMLSelectElement).value
-              )
-            }
-          >
-            <option value="">First import format</option>
-            {exportFormatState.map((format, index) => (
-              <option key={index} value={format.name}>
-                {format.name}
-              </option>
-            ))}
-          </select>
-        </SettingItem>
-        <SettingItem
-          name="Check Zotero now"
-          description="Run a manual missing-reference check using the monitor settings above."
-        >
-          <button onClick={runZoteroMonitorCheck}>Check now</button>
-        </SettingItem>
-      </SettingsSection>
-
-      <SettingsDivider />
-
-      <SettingsSection
-        title="Monitor filters and schedule"
-        description="Optional background checks and filters for missing-reference detection."
-        collapsible
-        defaultOpen={false}
-      >
-        <SettingItem
-          name="Check when Obsidian starts"
-          description="Run the monitor after the workspace loads. The monitor must also be enabled."
-        >
-          <div
-            onClick={() => {
-              setZoteroMonitorStartup((state) => {
-                updateSetting('zoteroMonitorCheckOnStartup', !state);
-                return !state;
-              });
-            }}
-            className={`checkbox-container${
-              zoteroMonitorStartup ? ' is-enabled' : ''
-            }`}
-          />
-        </SettingItem>
-        <SettingItem
-          name="Check interval"
-          description="Minutes between automatic checks. Use 0 to disable recurring checks."
-        >
-          <input
-            min="0"
-            type="number"
-            defaultValue={settings.zoteroMonitorIntervalMinutes.toString()}
-            onChange={(e) =>
-              updateSetting(
-                'zoteroMonitorIntervalMinutes',
-                Number((e.target as HTMLInputElement).value)
-              )
-            }
-          />
-        </SettingItem>
-        <SettingItem
-          name="Recent Zotero items"
-          description="Only consider items added to Zotero within this many days. Leave blank for all time."
-        >
-          <input
-            min="0"
-            type="number"
-            placeholder="30"
-            defaultValue={settings.zoteroMonitorRecentDays?.toString() || ''}
-            onChange={(e) => {
-              const value = (e.target as HTMLInputElement).value;
-              updateSetting(
-                'zoteroMonitorRecentDays',
-                value === '' ? null : Number(value)
-              );
-            }}
-          />
-        </SettingItem>
-        <SettingItem
-          name="Libraries or groups"
-          description="Optional comma-separated Zotero library IDs or library/group names. Leave blank for all libraries."
-        >
-          <input
-            type="text"
-            spellCheck={false}
-            placeholder="1, My Group Library"
-            defaultValue={formatScopeInput(settings.zoteroMonitorLibraryScope)}
-            onChange={(e) =>
-              updateSetting(
-                'zoteroMonitorLibraryScope',
-                splitScopeInput((e.target as HTMLInputElement).value)
-              )
-            }
-          />
-        </SettingItem>
-        <SettingItem
-          name="Collection paths"
-          description="Optional comma-separated exact Zotero collection paths, such as Reading/Queue."
-        >
-          <input
-            type="text"
-            spellCheck={false}
-            placeholder="Reading/Queue"
-            defaultValue={formatScopeInput(
-              settings.zoteroMonitorCollectionScope
-            )}
-            onChange={(e) =>
-              updateSetting(
-                'zoteroMonitorCollectionScope',
-                splitScopeInput((e.target as HTMLInputElement).value)
-              )
-            }
-          />
-        </SettingItem>
-        <SettingItem
-          name="Tags"
-          description="Optional comma-separated exact Zotero tags. Leave blank for all tags."
-        >
-          <input
-            type="text"
-            spellCheck={false}
-            placeholder="to-read, paper"
-            defaultValue={formatScopeInput(settings.zoteroMonitorTagScope)}
-            onChange={(e) =>
-              updateSetting(
-                'zoteroMonitorTagScope',
-                splitScopeInput((e.target as HTMLInputElement).value)
-              )
-            }
-          />
-        </SettingItem>
-      </SettingsSection>
-
-      <SettingsDivider />
-
-      <SettingsSection
-        title="Literature reports"
+        title="Extra - AI Literature Reports"
         description="Generate local Ollama synthesis reports from imported Zotero literature notes."
       >
         <SettingsSubheading
@@ -1216,61 +1368,7 @@ function SettingsComponent({
       <SettingsDivider />
 
       <SettingsSection
-        title="Citation formats"
-        description="Commands that insert formatted citations or rendered citation templates."
-      >
-        <SettingItem
-          name="Add citation format"
-          description="Create another command for inserting citations, bibliographies, or citation templates."
-        >
-          <button onClick={addCite} className="mod-cta">
-            Add Citation Format
-          </button>
-        </SettingItem>
-        {citeFormatState.map((f, i) => {
-          return (
-            <CiteFormatSettings
-              key={i}
-              format={f}
-              index={i}
-              updateFormat={updateCite}
-              removeFormat={removeCite}
-            />
-          );
-        })}
-      </SettingsSection>
-
-      <SettingsDivider />
-
-      <SettingsSection
-        title="Import formats"
-        description="Templates and output paths used by Zotero import commands."
-      >
-        <SettingItem
-          name="Add import format"
-          description="Create another Zotero import command with its own output paths and template."
-        >
-          <button onClick={addExport} className="mod-cta">
-            Add Import Format
-          </button>
-        </SettingItem>
-        {exportFormatState.map((f, i) => {
-          return (
-            <ExportFormatSettings
-              key={exportFormatState.length - i}
-              format={f}
-              index={i}
-              updateFormat={updateExport}
-              removeFormat={removeExport}
-            />
-          );
-        })}
-      </SettingsSection>
-
-      <SettingsDivider />
-
-      <SettingsSection
-        title="Advanced image and OCR settings"
+        title="Extra - Image Import and OCR"
         description="Rectangle annotations can be extracted from PDFs as images."
         collapsible
         defaultOpen={false}
@@ -1456,6 +1554,7 @@ export class ZoteroConnectorSettingsTab extends PluginSettingTab {
         removeExportFormat={this.removeExportFormat}
         updateSetting={this.updateSetting}
         runZoteroMonitorCheck={this.runZoteroMonitorCheck}
+        runZoteroAutoImport={this.runZoteroAutoImport}
       />,
       this.containerEl
     );
@@ -1521,6 +1620,10 @@ export class ZoteroConnectorSettingsTab extends PluginSettingTab {
 
   runZoteroMonitorCheck = () => {
     this.plugin.zoteroMonitor.runManualCheck();
+  };
+
+  runZoteroAutoImport = () => {
+    this.plugin.zoteroMonitor.runAutoImportNow();
   };
 
   debouncedSave() {

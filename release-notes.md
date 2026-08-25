@@ -1,3 +1,4 @@
-- Add an enabled-by-default duplicate citekey check for new Zotero literature notes.
-- Warn before importing a Better BibTeX `a`-suffixed citekey note when the unsuffixed note already exists.
-- Add a settings toggle and helper tests for the duplicate-citekey path detection.
+- Add safe autoimport for missing Zotero literature notes, including default managed properties and non-interactive skip handling.
+- Add monitor recent-scope modes for today, last N days, latest N items, and all time.
+- Add Zotero-owned `zoteroCitekeyLink` frontmatter and keep managed frontmatter properties sorted.
+- Reorganize settings sections around import behavior, templates, and extra integrations.

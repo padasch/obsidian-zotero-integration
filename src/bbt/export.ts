@@ -6,7 +6,12 @@ import { ConfirmationModal } from './ConfirmationModal';
 
 import { doesEXEExist, getVaultRoot } from '../helpers';
 import {
+  createZoteroCitekeyLink,
+  sortFrontmatterProperties,
+} from '../ZoteroManagedProperties';
+import {
   DatabaseWithPort,
+  ExportToMarkdownSkip,
   ExportToMarkdownParams,
   RenderCiteTemplateParams,
   ZoteroConnectorSettings,
@@ -346,6 +351,16 @@ async function processItem(
       cslStyle
     );
   }
+}
+
+function getItemCitekey(item: any): string {
+  return String(
+    item?.citekey ||
+      item?.citationKey ||
+      item?.['citation-key'] ||
+      getCiteKeyFromAny(item)?.key ||
+      ''
+  ).trim();
 }
 
 function generateHelpfulTemplateError(e: Error, template: string) {
@@ -718,6 +733,21 @@ async function writeManagedProperties(
     if (managedProperties.zoteroSummary !== undefined) {
       frontmatter.zoteroSummary = managedProperties.zoteroSummary;
     }
+
+    sortFrontmatterProperties(frontmatter);
+  });
+}
+
+async function writeZoteroOwnedProperties(
+  file: TFile,
+  templateData: Record<string, any>
+) {
+  const zoteroCitekeyLink = createZoteroCitekeyLink(templateData);
+  if (!zoteroCitekeyLink) return;
+
+  await app.fileManager.processFrontMatter(file, (frontmatter) => {
+    frontmatter.zoteroCitekeyLink = zoteroCitekeyLink;
+    sortFrontmatterProperties(frontmatter);
   });
 }
 
@@ -727,6 +757,7 @@ async function writeNewNoteDefaults(
 ) {
   await app.fileManager.processFrontMatter(file, (frontmatter) => {
     applyNewNoteDefaults(frontmatter, managedProperties);
+    sortFrontmatterProperties(frontmatter);
   });
 }
 
@@ -751,6 +782,8 @@ async function writePreservedProperties(
 
       frontmatter[property] = cloneFrontmatterValue(existingValue);
     }
+
+    sortFrontmatterProperties(frontmatter);
   });
 }
 
@@ -773,35 +806,47 @@ async function refreshSciteMetadataOnImport(
   }
 }
 
-async function confirmNoDuplicateCitekeyNote(
+function getDuplicateCitekeyNoteSkip(
   markdownPath: string,
   item: any,
   settings: ZoteroConnectorSettings
-): Promise<boolean> {
-  if (settings.zoteroDuplicateCitekeyCheckEnabled === false) return true;
+): ExportToMarkdownSkip | null {
+  if (settings.zoteroDuplicateCitekeyCheckEnabled === false) return null;
 
-  const citekey =
-    item?.citekey ||
-    item?.citationKey ||
-    item?.['citation-key'] ||
-    getCiteKeyFromAny(item)?.key;
+  const citekey = getItemCitekey(item);
   const duplicateCandidatePath = getDuplicateCitekeyCandidatePath(
     markdownPath,
     citekey
   );
 
-  if (!duplicateCandidatePath) return true;
+  if (!duplicateCandidatePath) return null;
 
   const duplicateFile = app.vault.getAbstractFileByPath(
     duplicateCandidatePath
   );
-  if (!(duplicateFile instanceof TFile)) return true;
+  if (!(duplicateFile instanceof TFile)) return null;
 
-  const baseCitekey = String(citekey).slice(0, -1);
+  const baseCitekey = citekey.slice(0, -1);
+  return {
+    reason: 'possible-duplicate',
+    markdownPath,
+    citekey,
+    message: `The citekey "${citekey}" looks like a Better BibTeX duplicate of "${baseCitekey}". A note already exists at "${duplicateCandidatePath}".`,
+  };
+}
+
+async function confirmNoDuplicateCitekeyNote(
+  markdownPath: string,
+  item: any,
+  settings: ZoteroConnectorSettings
+): Promise<boolean> {
+  const skip = getDuplicateCitekeyNoteSkip(markdownPath, item, settings);
+  if (!skip) return true;
+
   const modal = new ConfirmationModal(
     app,
     'Possible duplicate Zotero literature note',
-    `The citekey "${citekey}" looks like a Better BibTeX duplicate of "${baseCitekey}". A note already exists at "${duplicateCandidatePath}". Import "${markdownPath}" anyway?`,
+    `${skip.message} Import "${markdownPath}" anyway?`,
     'Import anyway',
     'Skip import'
   );
@@ -818,6 +863,12 @@ export async function exportToMarkdown(
   const { database, exportFormat, settings } = params;
   const sourcePath = getATemplatePath(params);
   const canExtract = doesEXEExist();
+  const notify = (message: string, timeout = 7000) => {
+    if (!params.suppressNotices) new Notice(message, timeout);
+  };
+  const reportSkip = async (skip: ExportToMarkdownSkip) => {
+    await params.onSkip?.(skip);
+  };
 
   const citeKeys = explicitCiteKeys
     ? explicitCiteKeys
@@ -1044,16 +1095,32 @@ export async function exportToMarkdown(
         existingAnnotations
       );
 
-      if (!rendered) continue;
+      if (!rendered) {
+        await reportSkip({
+          reason: 'render-failed',
+          markdownPath,
+          citekey: getItemCitekey(item),
+          message: `Template rendering failed for "${markdownPath}".`,
+        });
+        continue;
+      }
 
       if (file) {
         if (params.forceOverwrite) {
           await app.vault.modify(file, rendered);
+          await writeZoteroOwnedProperties(file, templateData);
           await writeManagedProperties(file, params.managedProperties);
           await writePreservedProperties(file, data.frontmatter, settings);
           await refreshSciteMetadataOnImport(file, item, settings);
           await params.afterWrite?.(file, item, markdownPath);
           createdOrUpdatedMarkdownFiles.push(markdownPath);
+        } else if (params.nonInteractive) {
+          await reportSkip({
+            reason: 'existing-file',
+            markdownPath,
+            citekey: getItemCitekey(item),
+            message: `A literature note already exists at "${markdownPath}".`,
+          });
         } else {
           // Show confirmation modal before overwriting existing file.
           const modal = new ConfirmationModal(
@@ -1067,6 +1134,7 @@ export async function exportToMarkdown(
 
           if (shouldOverwrite) {
             await app.vault.modify(file, rendered);
+            await writeZoteroOwnedProperties(file, templateData);
             await writeManagedProperties(file, params.managedProperties);
             await writePreservedProperties(file, data.frontmatter, settings);
             await refreshSciteMetadataOnImport(file, item, settings);
@@ -1075,13 +1143,21 @@ export async function exportToMarkdown(
           }
         }
       } else {
+        if (params.nonInteractive) {
+          const skip = getDuplicateCitekeyNoteSkip(markdownPath, item, settings);
+          if (skip) {
+            await reportSkip(skip);
+            continue;
+          }
+        }
+
         const shouldCreate = await confirmNoDuplicateCitekeyNote(
           markdownPath,
           item,
           settings
         );
         if (!shouldCreate) {
-          new Notice(
+          notify(
             `Skipped possible duplicate Zotero literature note "${markdownPath}".`,
             7000
           );
@@ -1090,6 +1166,7 @@ export async function exportToMarkdown(
 
         await mkMDDir(markdownPath);
         const createdFile = await app.vault.create(markdownPath, rendered);
+        await writeZoteroOwnedProperties(createdFile, templateData);
         await writeManagedProperties(createdFile, params.managedProperties);
         await writeNewNoteDefaults(createdFile, params.managedProperties);
         await refreshSciteMetadataOnImport(createdFile, item, settings);
@@ -1097,7 +1174,14 @@ export async function exportToMarkdown(
         createdOrUpdatedMarkdownFiles.push(markdownPath);
       }
     } catch (e) {
-      new Notice(
+      await reportSkip({
+        reason: 'import-failed',
+        markdownPath,
+        citekey: getItemCitekey(data.item),
+        message:
+          e instanceof Error ? e.message : `Import failed for ${markdownPath}.`,
+      });
+      notify(
         `Import failed for ${markdownPath}, check developer console for details`,
         7000
       );

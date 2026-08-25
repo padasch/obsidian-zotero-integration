@@ -65,8 +65,24 @@ export interface ExportToMarkdownParams {
   exportFormat: ExportFormat;
   managedProperties?: ZoteroManagedUserProperties;
   forceOverwrite?: boolean;
+  nonInteractive?: boolean;
+  suppressNotices?: boolean;
   pathOverrides?: Record<string, string>;
   afterWrite?: (file: any, item: any, markdownPath: string) => void | Promise<void>;
+  onSkip?: (skip: ExportToMarkdownSkip) => void | Promise<void>;
+}
+
+export type ExportToMarkdownSkipReason =
+  | 'existing-file'
+  | 'possible-duplicate'
+  | 'render-failed'
+  | 'import-failed';
+
+export interface ExportToMarkdownSkip {
+  reason: ExportToMarkdownSkipReason;
+  markdownPath: string;
+  citekey?: string;
+  message?: string;
 }
 
 export type ZoteroManagedUserStatus = string;
@@ -80,6 +96,7 @@ export interface ZoteroManagedUserProperties {
 }
 
 export type ZoteroMonitorAutomaticAction = 'notice' | 'modal';
+export type ZoteroMonitorRecentScopeMode = 'today' | 'days' | 'latest' | 'all';
 export type LiteratureReportScopeProperty = 'zoteroProject' | 'zoteroTopic';
 export type ZoteroItemTableColumn =
   | 'title'
@@ -149,11 +166,17 @@ export interface ZoteroConnectorSettings {
   zoteroMonitorCheckOnStartup?: boolean;
   zoteroMonitorIntervalMinutes?: number;
   zoteroMonitorAutomaticAction?: ZoteroMonitorAutomaticAction;
+  zoteroMonitorRecentScopeMode?: ZoteroMonitorRecentScopeMode;
+  zoteroMonitorRecentScopeValue?: number;
+  /** @deprecated use zoteroMonitorRecentScopeMode/zoteroMonitorRecentScopeValue */
   zoteroMonitorRecentDays?: number | null;
   zoteroMonitorLibraryScope?: string[];
   zoteroMonitorCollectionScope?: string[];
   zoteroMonitorTagScope?: string[];
   zoteroMonitorImportFormat?: string;
+  zoteroAutoImportEnabled?: boolean;
+  zoteroAutoImportNote?: string;
+  zoteroAutoImportStatus?: string;
   zoteroItemTableColumns?: string[];
   zoteroMonitorTableColumns?: string[];
   zoteroOrphanedProperty?: string;
