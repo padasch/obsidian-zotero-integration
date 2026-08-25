@@ -97,6 +97,7 @@ export interface ZoteroManagedUserProperties {
 
 export type ZoteroMonitorAutomaticAction = 'notice' | 'modal';
 export type ZoteroMonitorRecentScopeMode = 'today' | 'days' | 'latest' | 'all';
+export type ZoteroCitekeyLinkLabelMode = 'citekey' | 'emoji';
 export type LiteratureReportScopeProperty = 'zoteroProject' | 'zoteroTopic';
 export type ZoteroItemTableColumn =
   | 'title'
@@ -159,6 +160,7 @@ export interface ZoteroConnectorSettings {
   settingsVersion?: number;
   shouldConcat?: boolean;
   whichNotesToOpenAfterImport: NotesToOpenAfterImport;
+  zoteroCitekeyLinkLabelMode?: ZoteroCitekeyLinkLabelMode;
   zoteroDuplicateCitekeyCheckEnabled?: boolean;
   zoteroPreservedProperties?: string[];
   zoteroTaskAnnotationColors?: string[];

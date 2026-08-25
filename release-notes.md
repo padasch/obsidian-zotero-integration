@@ -1,4 +1,3 @@
-- Add safe autoimport for missing Zotero literature notes, including default managed properties and non-interactive skip handling.
-- Add monitor recent-scope modes for today, last N days, latest N items, and all time.
-- Add Zotero-owned `zoteroCitekeyLink` frontmatter and keep managed frontmatter properties sorted.
-- Reorganize settings sections around import behavior, templates, and extra integrations.
+- Add a setting for the managed `zoteroCitekeyLink` label.
+- Support either the full `@citekey` label or a paper-icon label for linked Zotero notes.
+- Keep the full `@citekey` fallback when no Zotero Reader, web, or item link target is available.

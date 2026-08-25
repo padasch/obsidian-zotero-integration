@@ -73,11 +73,15 @@ function getPdfReaderTarget(item: Record<string, any>): string {
   );
 }
 
-export function createZoteroCitekeyLink(item: Record<string, any>): string {
+export function createZoteroCitekeyLink(
+  item: Record<string, any>,
+  labelMode: 'citekey' | 'emoji' = 'citekey'
+): string {
   const citekey = getCitekey(item);
   if (!citekey) return '';
 
-  const label = `@${citekey}`;
+  const citekeyLabel = `@${citekey}`;
+  const label = labelMode === 'emoji' ? '\u{1F4C4}' : citekeyLabel;
   const target =
     getPdfReaderTarget(item) ||
     getMarkdownLinkTarget(item.zoteroURL) ||
@@ -85,7 +89,7 @@ export function createZoteroCitekeyLink(item: Record<string, any>): string {
     getMarkdownLinkTarget(item.zoteroURI) ||
     getMarkdownLinkTarget(item.desktopURI);
 
-  return target ? `[${label}](${target})` : label;
+  return target ? `[${label}](${target})` : citekeyLabel;
 }
 
 export function sortFrontmatterProperties(frontmatter: Record<string, any>) {

@@ -105,6 +105,7 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   openFileAfterImportPath: '',
   openNoteAfterImport: false,
   whichNotesToOpenAfterImport: 'first-imported-note',
+  zoteroCitekeyLinkLabelMode: 'citekey',
   zoteroDuplicateCitekeyCheckEnabled: true,
   zoteroPreservedProperties: [],
   zoteroTaskAnnotationColors: ['Purple', 'Magenta', 'Gray'],
@@ -493,6 +494,9 @@ export default class ZoteroConnector extends Plugin {
     mergedSettings.zoteroAutoImportStatus =
       mergedSettings.zoteroAutoImportStatus ||
       DEFAULT_SETTINGS.zoteroAutoImportStatus;
+    mergedSettings.zoteroCitekeyLinkLabelMode =
+      mergedSettings.zoteroCitekeyLinkLabelMode ||
+      DEFAULT_SETTINGS.zoteroCitekeyLinkLabelMode;
     migrateMonitorRecentScope(loadedSettings, mergedSettings);
     delete mergedSettings.zoteroMonitorTableColumns;
 

@@ -249,6 +249,24 @@ describe('createZoteroCitekeyLink()', () => {
       '@smith2026'
     );
   });
+
+  it('can use a paper icon as the link label', () => {
+    expect(
+      createZoteroCitekeyLink(
+        {
+          citationKey: 'smith2026',
+          url: 'https://example.com/paper',
+        },
+        'emoji'
+      )
+    ).toBe('[📄](https://example.com/paper)');
+  });
+
+  it('keeps a useful citekey label when no link target exists in emoji mode', () => {
+    expect(createZoteroCitekeyLink({ citationKey: 'smith2026' }, 'emoji')).toBe(
+      '@smith2026'
+    );
+  });
 });
 
 describe('sortFrontmatterProperties()', () => {

@@ -775,6 +775,24 @@ function SettingsComponent({
           description="Display fields used in Zotero item lists and colors that indicate follow-up annotations."
         />
         <SettingItem
+          name="Citekey link label"
+          description="Text shown for the managed zoteroCitekeyLink property. The target still prefers Zotero Reader, then web link, then Zotero item."
+        >
+          <select
+            className="dropdown"
+            defaultValue={settings.zoteroCitekeyLinkLabelMode || 'citekey'}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroCitekeyLinkLabelMode',
+                (e.target as HTMLSelectElement).value as any
+              )
+            }
+          >
+            <option value="citekey">@citekey</option>
+            <option value="emoji">Paper icon (📄)</option>
+          </select>
+        </SettingItem>
+        <SettingItem
           name="Zotero item table columns"
           description="Columns shown by Zotero item import/review tables. Use one key per line; order controls table order."
           className="zt-setting-item-wide"

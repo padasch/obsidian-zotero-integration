@@ -740,9 +740,13 @@ async function writeManagedProperties(
 
 async function writeZoteroOwnedProperties(
   file: TFile,
-  templateData: Record<string, any>
+  templateData: Record<string, any>,
+  settings: ZoteroConnectorSettings
 ) {
-  const zoteroCitekeyLink = createZoteroCitekeyLink(templateData);
+  const zoteroCitekeyLink = createZoteroCitekeyLink(
+    templateData,
+    settings.zoteroCitekeyLinkLabelMode || 'citekey'
+  );
   if (!zoteroCitekeyLink) return;
 
   await app.fileManager.processFrontMatter(file, (frontmatter) => {
@@ -1108,7 +1112,7 @@ export async function exportToMarkdown(
       if (file) {
         if (params.forceOverwrite) {
           await app.vault.modify(file, rendered);
-          await writeZoteroOwnedProperties(file, templateData);
+          await writeZoteroOwnedProperties(file, templateData, settings);
           await writeManagedProperties(file, params.managedProperties);
           await writePreservedProperties(file, data.frontmatter, settings);
           await refreshSciteMetadataOnImport(file, item, settings);
@@ -1134,7 +1138,7 @@ export async function exportToMarkdown(
 
           if (shouldOverwrite) {
             await app.vault.modify(file, rendered);
-            await writeZoteroOwnedProperties(file, templateData);
+            await writeZoteroOwnedProperties(file, templateData, settings);
             await writeManagedProperties(file, params.managedProperties);
             await writePreservedProperties(file, data.frontmatter, settings);
             await refreshSciteMetadataOnImport(file, item, settings);
@@ -1166,7 +1170,7 @@ export async function exportToMarkdown(
 
         await mkMDDir(markdownPath);
         const createdFile = await app.vault.create(markdownPath, rendered);
-        await writeZoteroOwnedProperties(createdFile, templateData);
+        await writeZoteroOwnedProperties(createdFile, templateData, settings);
         await writeManagedProperties(createdFile, params.managedProperties);
         await writeNewNoteDefaults(createdFile, params.managedProperties);
         await refreshSciteMetadataOnImport(createdFile, item, settings);
