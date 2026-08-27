@@ -1,3 +1,3 @@
-- Mark imported literature notes as `annotated` when imported annotations are present and the current status is empty or `new`.
-- Add a setting to disable automatic annotated-status assignment.
-- Add a command to background-import missing Zotero notes with the configured defaults.
+- Make background imports non-interactive by suppressing Zotero and PDF extraction progress modals.
+- Add a background import progress notice and completion summary.
+- Add a review modal for Zotero items skipped during background import.

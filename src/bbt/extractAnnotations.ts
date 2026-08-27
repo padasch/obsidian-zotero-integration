@@ -17,9 +17,10 @@ interface ExtractParams {
   ocrLang?: string;
   tesseractPath?: string;
   tessDataDir?: string;
+  silent?: boolean;
 }
 
-const paramMap: Record<keyof ExtractParams, string> = {
+const paramMap: Record<Exclude<keyof ExtractParams, 'silent'>, string> = {
   noWrite: '-w',
   imageOutputPath: '-o',
   imageBaseName: '-n',
@@ -38,17 +39,21 @@ export async function extractAnnotations(
   params: ExtractParams,
   overridePath?: string
 ) {
-  const modal = new LoadingModal(app, 'Extracting annotations...');
-  modal.open();
+  const modal = params.silent
+    ? null
+    : new LoadingModal(app, 'Extracting annotations...');
+  modal?.open();
 
   const args = [input];
 
   Object.keys(params).forEach((k) => {
+    if (k === 'silent') return '';
+
     const val = params[k as keyof ExtractParams];
 
     if (val === '' || val === undefined) return '';
 
-    const key = paramMap[k as keyof ExtractParams];
+    const key = paramMap[k as Exclude<keyof ExtractParams, 'silent'>];
 
     if (typeof val === 'boolean') {
       if (val) {
@@ -68,7 +73,9 @@ export async function extractAnnotations(
     const isExecutable = ensureExecutableSync(overridePath);
 
     if (!isExecutable) {
-      new Notice(`Error: PDF utility is not executable`, 10000);
+      if (!params.silent) {
+        new Notice(`Error: PDF utility is not executable`, 10000);
+      }
       return '[]';
     }
 
@@ -77,38 +84,48 @@ export async function extractAnnotations(
       args
     );
 
-    modal.close();
+    modal?.close();
 
     if (result.stderr.toLowerCase().includes('password')) {
-      new Notice(
-        `Error opening ${path.basename(input)}: PDF is password protected`,
-        10000
-      );
+      if (!params.silent) {
+        new Notice(
+          `Error opening ${path.basename(input)}: PDF is password protected`,
+          10000
+        );
+      }
       return '[]';
     }
 
     if (result.stderr && !result.stderr.includes('warning')) {
-      new Notice(`Error processing PDF: ${result.stderr}`, 10000);
+      if (!params.silent) {
+        new Notice(`Error processing PDF: ${result.stderr}`, 10000);
+      }
       throw new Error(result.stderr);
     }
 
     return result.stdout;
   } catch (e) {
-    modal.close();
+    modal?.close();
 
     if (e.message.toLowerCase().includes('password')) {
-      new Notice(
-        `Error opening ${path.basename(input)}: PDF is password protected`,
-        10000
-      );
+      if (!params.silent) {
+        new Notice(
+          `Error opening ${path.basename(input)}: PDF is password protected`,
+          10000
+        );
+      }
       return '[]';
     } else if (e.message.toLowerCase().includes('type3')) {
-      new Notice(`Error processing annotations: ${e.message}`, 10000);
+      if (!params.silent) {
+        new Notice(`Error processing annotations: ${e.message}`, 10000);
+      }
       return '[]';
     }
 
     console.error(e);
-    new Notice(`Error processing PDF: ${e.message}`, 10000);
+    if (!params.silent) {
+      new Notice(`Error processing PDF: ${e.message}`, 10000);
+    }
     throw e;
   }
 }

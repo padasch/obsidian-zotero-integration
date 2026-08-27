@@ -4,6 +4,7 @@ import type ZoteroConnector from './main';
 import {
   CiteKeyExport,
   DatabaseWithPort,
+  ExportToMarkdownSkip,
   ZoteroItemTableColumn,
   ZoteroManagedUserProperties,
   ZoteroMonitorItem,
@@ -83,7 +84,7 @@ type MonitorImportOptions = {
 };
 type MonitorImportResult = {
   paths: string[];
-  skipped: number;
+  skipped: ExportToMarkdownSkip[];
 };
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -1526,6 +1527,58 @@ class ZoteroOrphanedNotesModal extends Modal {
   }
 }
 
+class ZoteroBackgroundImportSkippedModal extends Modal {
+  constructor(app: App, private skipped: ExportToMarkdownSkip[]) {
+    super(app);
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.modalEl.addClass('zt-monitor-modal-shell');
+
+    const container = contentEl.createDiv('zt-monitor-modal');
+    const header = container.createDiv('zt-monitor-header');
+    header.createEl('h2', { text: 'Skipped background imports' });
+    header.createEl('p', {
+      text: `${this.skipped.length} Zotero item${
+        this.skipped.length === 1 ? '' : 's'
+      } were skipped during background import.`,
+    });
+
+    const list = container.createDiv('zt-monitor-list');
+    const table = list.createEl('table', {
+      cls: 'zt-monitor-table',
+    });
+    const thead = table.createEl('thead');
+    const headerRow = thead.createEl('tr');
+    ['Reason', 'Citekey', 'Path', 'Details'].forEach((label) => {
+      headerRow.createEl('th', { text: label });
+    });
+
+    const tbody = table.createEl('tbody');
+    for (const skip of this.skipped) {
+      const row = tbody.createEl('tr');
+      row.createEl('td', { text: formatSkipReason(skip.reason) });
+      row.createEl('td', { text: skip.citekey || '' });
+      row.createEl('td', { text: skip.markdownPath || '' });
+      row.createEl('td', { text: skip.message || '' });
+    }
+  }
+
+  onClose() {
+    this.modalEl.removeClass('zt-monitor-modal-shell');
+    this.contentEl.empty();
+  }
+}
+
+function formatSkipReason(reason: ExportToMarkdownSkip['reason']): string {
+  return reason
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 export class ZoteroMonitor {
   private intervalId: number | null = null;
   private preloadTimeoutId: number | null = null;
@@ -2021,33 +2074,83 @@ export class ZoteroMonitor {
   private async safeAutoImportItems(
     items: ZoteroMonitorItem[]
   ): Promise<MonitorImportResult> {
-    const result = await this.importItems(
-      items,
-      this.getAutoImportManagedProperties(),
-      {
-        nonInteractive: true,
-        openAfterImport: false,
-        suppressNotices: true,
-      }
-    );
+    const progressNotice = this.showBackgroundImportProgressNotice(items.length);
+    let result: MonitorImportResult;
 
-    const parts = [];
-    if (result.paths.length) {
-      parts.push(
-        `Imported ${result.paths.length} Zotero literature note${
-          result.paths.length === 1 ? '' : 's'
-        }`
+    try {
+      result = await this.importItems(
+        items,
+        this.getAutoImportManagedProperties(),
+        {
+          nonInteractive: true,
+          openAfterImport: false,
+          suppressNotices: true,
+        }
       );
-    }
-    if (result.skipped) {
-      parts.push(`skipped ${result.skipped}`);
-    }
-
-    if (parts.length) {
-      new Notice(`${parts.join(', ')}.`);
+    } finally {
+      progressNotice.hide();
     }
 
+    this.showBackgroundImportResultNotice(result);
     return result;
+  }
+
+  private showBackgroundImportProgressNotice(itemCount: number): Notice {
+    const notice = new Notice('', 0);
+    notice.noticeEl.empty();
+    notice.noticeEl
+      .createDiv('zt-monitor-notice-message')
+      .setText(
+        `Background importing ${itemCount} Zotero reference${
+          itemCount === 1 ? '' : 's'
+        }...`
+      );
+    notice.noticeEl.createEl('progress');
+    return notice;
+  }
+
+  private showBackgroundImportResultNotice(result: MonitorImportResult) {
+    const importedCount = result.paths.length;
+    const skippedCount = result.skipped.length;
+
+    if (!importedCount && !skippedCount) {
+      new Notice('No Zotero literature notes were imported.', 7000);
+      return;
+    }
+
+    const summary = `Background import finished: imported ${importedCount}, skipped ${skippedCount}.`;
+
+    if (!skippedCount) {
+      new Notice(summary, 7000);
+      return;
+    }
+
+    const notice = new Notice('', 0);
+    notice.noticeEl.empty();
+    notice.noticeEl
+      .createDiv('zt-monitor-notice-message')
+      .setText(summary);
+
+    const actions = notice.noticeEl.createDiv('zt-monitor-notice-actions');
+    const reviewButton = actions.createEl('button', {
+      text: 'Review skipped',
+    });
+    reviewButton.type = 'button';
+    reviewButton.addClass('mod-cta');
+    reviewButton.addEventListener('click', () => {
+      new ZoteroBackgroundImportSkippedModal(
+        this.plugin.app,
+        result.skipped
+      ).open();
+    });
+
+    const dismissButton = actions.createEl('button', {
+      text: 'Dismiss',
+    });
+    dismissButton.type = 'button';
+    dismissButton.addEventListener('click', () => {
+      notice.hide();
+    });
   }
 
   private getOrphanedProperty(): string {
@@ -2381,11 +2484,19 @@ export class ZoteroMonitor {
 
     if (!exportFormat) {
       new Notice('No Zotero import format selected for the monitor.', 10000);
-      return { paths: [], skipped: items.length };
+      return {
+        paths: [],
+        skipped: items.map((item) => ({
+          reason: 'import-failed',
+          markdownPath: '',
+          citekey: item.citekey,
+          message: 'No Zotero import format selected for the monitor.',
+        })),
+      };
     }
 
     const createdOrUpdatedPaths: string[] = [];
-    let skipped = 0;
+    const skipped: ExportToMarkdownSkip[] = [];
     const database = this.getDatabase();
 
     for (const [libraryID, libraryItems] of groupItemsByLibrary(items).entries()) {
@@ -2397,8 +2508,8 @@ export class ZoteroMonitor {
           managedProperties,
           nonInteractive: options.nonInteractive,
           suppressNotices: options.suppressNotices,
-          onSkip: () => {
-            skipped += 1;
+          onSkip: (skip) => {
+            skipped.push(skip);
           },
         },
         libraryItems.map((item) => ({

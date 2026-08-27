@@ -114,19 +114,24 @@ export async function getCollectionFromCiteKey(
     });
   } catch (e) {
     console.error(e);
-    new Notice(`Error retrieving notes: ${e.message}`, 10000);
+    if (!silent) {
+      new Notice(`Error retrieving notes: ${e.message}`, 10000);
+    }
     return null;
   }
 }
 
 export async function getAttachmentsFromCiteKey(
   citeKey: CiteKey,
-  database: DatabaseWithPort
+  database: DatabaseWithPort,
+  silent?: boolean
 ) {
   let res: string;
 
-  const modal = new LoadingModal(app, 'Fetching collections from Zotero...');
-  modal.open();
+  const modal = silent
+    ? null
+    : new LoadingModal(app, 'Fetching collections from Zotero...');
+  modal?.open();
 
   const qid = Symbol();
   try {
@@ -146,20 +151,24 @@ export async function getAttachmentsFromCiteKey(
     });
   } catch (e) {
     console.error(e);
-    modal.close();
-    new Notice(`Error retrieving notes: ${e.message}`, 10000);
+    modal?.close();
+    if (!silent) {
+      new Notice(`Error retrieving notes: ${e.message}`, 10000);
+    }
     ZQueue.end(qid);
     return null;
   }
 
   ZQueue.end(qid);
-  modal.close();
+  modal?.close();
 
   try {
     return JSON.parse(res).result;
   } catch (e) {
     console.error(e);
-    new Notice(`Error retrieving notes: ${e.message}`, 10000);
+    if (!silent) {
+      new Notice(`Error retrieving notes: ${e.message}`, 10000);
+    }
     return null;
   }
 }
@@ -283,7 +292,9 @@ export async function getBibFromCiteKeys(
   } catch (e) {
     console.error(e);
     !silent && modal.close();
-    new Notice(`Error retrieving formatted bibliography: ${e.message}`, 10000);
+    if (!silent) {
+      new Notice(`Error retrieving formatted bibliography: ${e.message}`, 10000);
+    }
     ZQueue.end(qid);
     return null;
   }
@@ -307,7 +318,9 @@ export async function getBibFromCiteKeys(
       message = `Error: Received empty bibliography from Zotero. Ensure Zotero's quick copy settings are set and the selected citation style is installed.`;
     }
 
-    new Notice(message, 10000);
+    if (!silent) {
+      new Notice(message, 10000);
+    }
     return null;
   }
 }
@@ -379,12 +392,15 @@ export async function getItemJSONFromCiteKeys(
 export async function getItemJSONFromRelations(
   libraryID: number,
   relations: string[],
-  database: DatabaseWithPort
+  database: DatabaseWithPort,
+  silent?: boolean
 ) {
   let res: string;
 
-  const modal = new LoadingModal(app, 'Fetching data from Zotero...');
-  modal.open();
+  const modal = silent
+    ? null
+    : new LoadingModal(app, 'Fetching data from Zotero...');
+  modal?.open();
 
   const uriMap: Record<string, string> = {};
   const idOrder: string[] = [];
@@ -414,14 +430,16 @@ export async function getItemJSONFromRelations(
     });
   } catch (e) {
     console.error(e);
-    modal.close();
-    new Notice(`Error retrieving item data: ${e.message}`, 10000);
+    modal?.close();
+    if (!silent) {
+      new Notice(`Error retrieving item data: ${e.message}`, 10000);
+    }
     ZQueue.end(qid);
     return null;
   }
 
   ZQueue.end(qid);
-  modal.close();
+  modal?.close();
 
   const idMap: Record<string, any> = {};
   const citekeys: CiteKey[] = [];
@@ -440,12 +458,14 @@ export async function getItemJSONFromRelations(
     });
   } catch (e) {
     console.error(e);
-    new Notice(`Error retrieving item data: ${e.message}`, 10000);
+    if (!silent) {
+      new Notice(`Error retrieving item data: ${e.message}`, 10000);
+    }
     return null;
   }
 
   const items: any[] = citekeys.length
-    ? await getItemJSONFromCiteKeys(citekeys, database, libraryID)
+    ? await getItemJSONFromCiteKeys(citekeys, database, libraryID, silent)
     : [];
 
   return idOrder.map((id) => {
@@ -465,12 +485,15 @@ export async function getItemJSONFromRelations(
 
 export async function getIssueDateFromCiteKey(
   citeKey: CiteKey,
-  database: DatabaseWithPort
+  database: DatabaseWithPort,
+  silent?: boolean
 ) {
   let res: string;
 
-  const modal = new LoadingModal(app, 'Fetching data from Zotero...');
-  modal.open();
+  const modal = silent
+    ? null
+    : new LoadingModal(app, 'Fetching data from Zotero...');
+  modal?.open();
 
   const qid = Symbol();
   try {
@@ -494,14 +517,16 @@ export async function getIssueDateFromCiteKey(
     });
   } catch (e) {
     console.error(e);
-    modal.close();
-    new Notice(`Error retrieving item data: ${e.message}`, 10000);
+    modal?.close();
+    if (!silent) {
+      new Notice(`Error retrieving item data: ${e.message}`, 10000);
+    }
     ZQueue.end(qid);
     return null;
   }
 
   ZQueue.end(qid);
-  modal.close();
+  modal?.close();
 
   try {
     const parsed = JSON.parse(res);
@@ -535,7 +560,9 @@ export async function getIssueDateFromCiteKey(
     return dates[0] ? dates[0] : null;
   } catch (e) {
     console.error(e);
-    new Notice(`Error retrieving item data: ${e.message}`, 10000);
+    if (!silent) {
+      new Notice(`Error retrieving item data: ${e.message}`, 10000);
+    }
     return null;
   }
 }
