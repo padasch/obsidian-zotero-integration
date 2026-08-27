@@ -35,6 +35,12 @@ function cleanString(value: unknown): string {
   return String(value).trim();
 }
 
+function isEmptyStatus(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (Array.isArray(value)) return value.length === 0;
+  return String(value).trim() === '';
+}
+
 function getCitekey(item: Record<string, any>): string {
   return cleanString(
     item.citationKey ||
@@ -108,5 +114,22 @@ export function sortFrontmatterProperties(frontmatter: Record<string, any>) {
 
   for (const key of sortedKeys) {
     frontmatter[key] = sortedValues[key];
+  }
+}
+
+export function getAnnotationCount(templateData: Record<string, any>): number {
+  const annotations = templateData.annotations;
+  return Array.isArray(annotations) ? annotations.length : 0;
+}
+
+export function applyAnnotatedStatusFromAnnotations(
+  frontmatter: Record<string, any>,
+  templateData: Record<string, any>
+) {
+  if (getAnnotationCount(templateData) <= 0) return;
+
+  const status = frontmatter.zoteroStatus;
+  if (isEmptyStatus(status) || cleanString(status).toLocaleLowerCase() === 'new') {
+    frontmatter.zoteroStatus = 'annotated';
   }
 }

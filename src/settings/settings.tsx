@@ -287,6 +287,11 @@ function SettingsComponent({
     !!settings.zoteroMonitorCheckOnStartup
   );
 
+  const [
+    zoteroSetStatusAnnotatedOnImport,
+    setZoteroSetStatusAnnotatedOnImport,
+  ] = React.useState(settings.zoteroSetStatusAnnotatedOnImport !== false);
+
   const [zoteroAutoImportEnabled, setZoteroAutoImportEnabled] = React.useState(
     !!settings.zoteroAutoImportEnabled
   );
@@ -791,6 +796,22 @@ function SettingsComponent({
             <option value="citekey">@citekey</option>
             <option value="emoji">Paper icon (📄)</option>
           </select>
+        </SettingItem>
+        <SettingItem
+          name="Mark annotated imports"
+          description="When imported annotations are found, set zoteroStatus to annotated if the status is empty or still new."
+        >
+          <div
+            onClick={() => {
+              setZoteroSetStatusAnnotatedOnImport((state) => {
+                updateSetting('zoteroSetStatusAnnotatedOnImport', !state);
+                return !state;
+              });
+            }}
+            className={`checkbox-container${
+              zoteroSetStatusAnnotatedOnImport ? ' is-enabled' : ''
+            }`}
+          />
         </SettingItem>
         <SettingItem
           name="Zotero item table columns"

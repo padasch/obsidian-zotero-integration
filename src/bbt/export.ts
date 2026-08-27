@@ -6,6 +6,7 @@ import { ConfirmationModal } from './ConfirmationModal';
 
 import { doesEXEExist, getVaultRoot } from '../helpers';
 import {
+  applyAnnotatedStatusFromAnnotations,
   createZoteroCitekeyLink,
   sortFrontmatterProperties,
 } from '../ZoteroManagedProperties';
@@ -755,6 +756,19 @@ async function writeZoteroOwnedProperties(
   });
 }
 
+async function writeAnnotationStatusProperty(
+  file: TFile,
+  templateData: Record<string, any>,
+  settings: ZoteroConnectorSettings
+) {
+  if (settings.zoteroSetStatusAnnotatedOnImport === false) return;
+
+  await app.fileManager.processFrontMatter(file, (frontmatter) => {
+    applyAnnotatedStatusFromAnnotations(frontmatter, templateData);
+    sortFrontmatterProperties(frontmatter);
+  });
+}
+
 async function writeNewNoteDefaults(
   file: TFile,
   managedProperties?: ZoteroManagedUserProperties
@@ -1115,6 +1129,7 @@ export async function exportToMarkdown(
           await writeZoteroOwnedProperties(file, templateData, settings);
           await writeManagedProperties(file, params.managedProperties);
           await writePreservedProperties(file, data.frontmatter, settings);
+          await writeAnnotationStatusProperty(file, templateData, settings);
           await refreshSciteMetadataOnImport(file, item, settings);
           await params.afterWrite?.(file, item, markdownPath);
           createdOrUpdatedMarkdownFiles.push(markdownPath);
@@ -1141,6 +1156,7 @@ export async function exportToMarkdown(
             await writeZoteroOwnedProperties(file, templateData, settings);
             await writeManagedProperties(file, params.managedProperties);
             await writePreservedProperties(file, data.frontmatter, settings);
+            await writeAnnotationStatusProperty(file, templateData, settings);
             await refreshSciteMetadataOnImport(file, item, settings);
             await params.afterWrite?.(file, item, markdownPath);
             createdOrUpdatedMarkdownFiles.push(markdownPath);
@@ -1173,6 +1189,7 @@ export async function exportToMarkdown(
         await writeZoteroOwnedProperties(createdFile, templateData, settings);
         await writeManagedProperties(createdFile, params.managedProperties);
         await writeNewNoteDefaults(createdFile, params.managedProperties);
+        await writeAnnotationStatusProperty(createdFile, templateData, settings);
         await refreshSciteMetadataOnImport(createdFile, item, settings);
         await params.afterWrite?.(createdFile, item, markdownPath);
         createdOrUpdatedMarkdownFiles.push(markdownPath);

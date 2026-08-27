@@ -161,6 +161,7 @@ export interface ZoteroConnectorSettings {
   shouldConcat?: boolean;
   whichNotesToOpenAfterImport: NotesToOpenAfterImport;
   zoteroCitekeyLinkLabelMode?: ZoteroCitekeyLinkLabelMode;
+  zoteroSetStatusAnnotatedOnImport?: boolean;
   zoteroDuplicateCitekeyCheckEnabled?: boolean;
   zoteroPreservedProperties?: string[];
   zoteroTaskAnnotationColors?: string[];

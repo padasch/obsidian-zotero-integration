@@ -1,3 +1,3 @@
-- Add a setting for the managed `zoteroCitekeyLink` label.
-- Support either the full `@citekey` label or a paper-icon label for linked Zotero notes.
-- Keep the full `@citekey` fallback when no Zotero Reader, web, or item link target is available.
+- Mark imported literature notes as `annotated` when imported annotations are present and the current status is empty or `new`.
+- Add a setting to disable automatic annotated-status assignment.
+- Add a command to background-import missing Zotero notes with the configured defaults.

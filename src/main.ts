@@ -106,6 +106,7 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   openNoteAfterImport: false,
   whichNotesToOpenAfterImport: 'first-imported-note',
   zoteroCitekeyLinkLabelMode: 'citekey',
+  zoteroSetStatusAnnotatedOnImport: true,
   zoteroDuplicateCitekeyCheckEnabled: true,
   zoteroPreservedProperties: [],
   zoteroTaskAnnotationColors: ['Purple', 'Magenta', 'Gray'],
@@ -235,6 +236,14 @@ export default class ZoteroConnector extends Plugin {
       name: 'Import missing notes (batch import)',
       callback: () => {
         this.zoteroMonitor.runManualCheck();
+      },
+    });
+
+    this.addCommand({
+      id: 'zdc-background-import-missing-literature',
+      name: 'Background import missing notes with defaults',
+      callback: () => {
+        this.zoteroMonitor.runAutoImportNow();
       },
     });
 
@@ -497,6 +506,8 @@ export default class ZoteroConnector extends Plugin {
     mergedSettings.zoteroCitekeyLinkLabelMode =
       mergedSettings.zoteroCitekeyLinkLabelMode ||
       DEFAULT_SETTINGS.zoteroCitekeyLinkLabelMode;
+    mergedSettings.zoteroSetStatusAnnotatedOnImport =
+      mergedSettings.zoteroSetStatusAnnotatedOnImport !== false;
     migrateMonitorRecentScope(loadedSettings, mergedSettings);
     delete mergedSettings.zoteroMonitorTableColumns;
 

@@ -10,6 +10,7 @@ import {
   getItemCollectionPaths,
 } from '../../ZoteroMonitor.helpers';
 import {
+  applyAnnotatedStatusFromAnnotations,
   createZoteroCitekeyLink,
   sortFrontmatterProperties,
 } from '../../ZoteroManagedProperties';
@@ -284,5 +285,38 @@ describe('sortFrontmatterProperties()', () => {
       'zoteroCitekey',
       'zoteroStatus',
     ]);
+  });
+});
+
+describe('applyAnnotatedStatusFromAnnotations()', () => {
+  it('sets empty or new statuses to annotated when annotations exist', () => {
+    const emptyFrontmatter: Record<string, unknown> = {};
+    const newFrontmatter: Record<string, unknown> = {
+      zoteroStatus: 'new',
+    };
+    const templateData = {
+      annotations: [{ annotatedText: 'Evidence' }],
+    };
+
+    applyAnnotatedStatusFromAnnotations(emptyFrontmatter, templateData);
+    applyAnnotatedStatusFromAnnotations(newFrontmatter, templateData);
+
+    expect(emptyFrontmatter.zoteroStatus).toBe('annotated');
+    expect(newFrontmatter.zoteroStatus).toBe('annotated');
+  });
+
+  it('preserves explicit non-new statuses and ignores unannotated imports', () => {
+    const readingFrontmatter: Record<string, unknown> = {
+      zoteroStatus: 'reading',
+    };
+    const emptyFrontmatter: Record<string, unknown> = {};
+
+    applyAnnotatedStatusFromAnnotations(readingFrontmatter, {
+      annotations: [{ annotatedText: 'Evidence' }],
+    });
+    applyAnnotatedStatusFromAnnotations(emptyFrontmatter, { annotations: [] });
+
+    expect(readingFrontmatter.zoteroStatus).toBe('reading');
+    expect(emptyFrontmatter.zoteroStatus).toBeUndefined();
   });
 });
