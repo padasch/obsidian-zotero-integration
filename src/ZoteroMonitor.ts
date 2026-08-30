@@ -19,6 +19,10 @@ import {
   ZOTERO_ITEM_TABLE_COLUMN_BY_KEY,
 } from './ZoteroItemTable.columns';
 import {
+  normalizeZoteroRelevance,
+  ZOTERO_RELEVANCE_VALUES,
+} from './ZoteroManagedProperties';
+import {
   describeMonitorRecentScope,
   filterItemsByRecentScope,
   filterItemsByScope,
@@ -135,6 +139,7 @@ function defaultManagedProperties(): ZoteroManagedUserProperties {
     zoteroProject: [],
     zoteroTopic: [],
     zoteroNote: '',
+    zoteroRelevance: 'no',
     zoteroStatus: 'new',
   };
 }
@@ -548,6 +553,7 @@ class ZoteroItemImportModal extends Modal {
   private importButtonContinue: HTMLButtonElement;
   private projectInputEl: HTMLInputElement;
   private topicInputEl: HTMLInputElement;
+  private relevanceSelectEl: HTMLSelectElement;
   private statusInputEl: HTMLInputElement;
   private noteInputEl: HTMLTextAreaElement;
   private quickSelectButtons: { [key in MonitorQuickSelect]: HTMLButtonElement | null } = {
@@ -714,6 +720,9 @@ class ZoteroItemImportModal extends Modal {
       zoteroProject: this.managedProperties.zoteroProject || [],
       zoteroTopic: this.managedProperties.zoteroTopic || [],
       zoteroNote: this.managedProperties.zoteroNote || '',
+      zoteroRelevance: normalizeZoteroRelevance(
+        this.managedProperties.zoteroRelevance
+      ),
       zoteroStatus: this.managedProperties.zoteroStatus || 'new',
     };
   }
@@ -797,6 +806,16 @@ class ZoteroItemImportModal extends Modal {
     this.statusInputEl = this.renderBulkInput(grid, 'Status', 'new', (value) => {
       this.managedProperties.zoteroStatus = value.trim() || 'new';
     }, 'new');
+    this.relevanceSelectEl = this.renderBulkSelect(
+      grid,
+      'Relevance',
+      ZOTERO_RELEVANCE_VALUES,
+      (value) => {
+        this.managedProperties.zoteroRelevance =
+          normalizeZoteroRelevance(value);
+      },
+      'no'
+    );
     this.noteInputEl = this.renderBulkTextarea(grid, 'Context note', 'Why this paper entered the queue', (value) => {
       this.managedProperties.zoteroNote = value.trim();
     });
@@ -807,6 +826,7 @@ class ZoteroItemImportModal extends Modal {
 
     if (this.projectInputEl) this.projectInputEl.value = '';
     if (this.topicInputEl) this.topicInputEl.value = '';
+    if (this.relevanceSelectEl) this.relevanceSelectEl.value = 'no';
     if (this.statusInputEl) this.statusInputEl.value = 'new';
     if (this.noteInputEl) this.noteInputEl.value = '';
   }
@@ -838,6 +858,30 @@ class ZoteroItemImportModal extends Modal {
     }
     input.addEventListener('input', () => onChange(input.value));
     return input;
+  }
+
+  private renderBulkSelect(
+    container: HTMLDivElement,
+    labelText: string,
+    values: string[],
+    onChange: (value: string) => void,
+    defaultValue = ''
+  ): HTMLSelectElement {
+    const field = container.createDiv('zt-monitor-bulk-field');
+    field.createEl('label', { text: labelText });
+    const select = field.createEl('select');
+    select.addClass('dropdown');
+
+    for (const value of values) {
+      select.createEl('option', {
+        text: value.charAt(0).toLocaleUpperCase() + value.slice(1),
+        value,
+      });
+    }
+
+    select.value = defaultValue;
+    select.addEventListener('change', () => onChange(select.value));
+    return select;
   }
 
   private renderBulkTextarea(
@@ -2067,6 +2111,9 @@ export class ZoteroMonitor {
       zoteroTopic: [],
       zoteroNote:
         this.plugin.settings.zoteroAutoImportNote || 'Automatically imported',
+      zoteroRelevance: normalizeZoteroRelevance(
+        this.plugin.settings.zoteroAutoImportRelevance
+      ),
       zoteroStatus: this.plugin.settings.zoteroAutoImportStatus || 'new',
     };
   }

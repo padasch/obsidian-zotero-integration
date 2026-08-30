@@ -55,6 +55,7 @@ export const KNOWN_ZOTERO_PROPERTY_KEYS = [
   'zoteroPublication',
   'zoteroPublisher',
   'zoteroReader',
+  'zoteroRelevance',
   'zoteroReport',
   'zoteroReportContextFile',
   'zoteroReportEvidenceCount',

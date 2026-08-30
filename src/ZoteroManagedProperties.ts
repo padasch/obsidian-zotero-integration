@@ -1,3 +1,5 @@
+import type { ZoteroManagedUserRelevance } from './types';
+
 export type AnnotationColor =
   | 'Yellow'
   | 'Red'
@@ -30,6 +32,13 @@ export const ZOTERO_ANNOTATION_COLOR_HEX: Record<AnnotationColor, string> = {
   Gray: '#aaaaaa',
 };
 
+export const ZOTERO_RELEVANCE_VALUES: ZoteroManagedUserRelevance[] = [
+  'no',
+  'low',
+  'medium',
+  'high',
+];
+
 // Intentionally strips control characters that can break YAML frontmatter.
 /* eslint-disable no-control-regex */
 const FRONTMATTER_CONTROL_CHARS =
@@ -49,6 +58,17 @@ export function sanitizeFrontmatterString(value: unknown): string {
     .replace(FRONTMATTER_CONTROL_CHARS, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+export function normalizeZoteroRelevance(
+  value: unknown
+): ZoteroManagedUserRelevance {
+  const cleaned = sanitizeFrontmatterString(value).toLocaleLowerCase();
+  return ZOTERO_RELEVANCE_VALUES.includes(
+    cleaned as ZoteroManagedUserRelevance
+  )
+    ? (cleaned as ZoteroManagedUserRelevance)
+    : 'no';
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

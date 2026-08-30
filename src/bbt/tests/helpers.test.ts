@@ -12,6 +12,7 @@ import {
 import {
   applyAnnotatedStatusFromAnnotations,
   createZoteroCitekeyLink,
+  normalizeZoteroRelevance,
   sanitizeFrontmatterString,
   sanitizeFrontmatterValue,
   sanitizeRenderedFrontmatter,
@@ -358,6 +359,15 @@ describe('frontmatter sanitization', () => {
     expect(sanitizeRenderedFrontmatter(markdown)).toContain(
       "zoteroNote: 'Follow-up: check methods'"
     );
+  });
+});
+
+describe('normalizeZoteroRelevance()', () => {
+  it('keeps valid relevance values and defaults invalid values to no', () => {
+    expect(normalizeZoteroRelevance('high')).toBe('high');
+    expect(normalizeZoteroRelevance(' Medium ')).toBe('medium');
+    expect(normalizeZoteroRelevance('critical')).toBe('no');
+    expect(normalizeZoteroRelevance(undefined)).toBe('no');
   });
 });
 

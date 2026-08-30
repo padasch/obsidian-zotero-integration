@@ -48,6 +48,7 @@ describe('getTemplates', () => {
       zoteroProject: ['[[Project A]]'],
       zoteroTopic: ['ecosystem'],
       zoteroNote: 'Read for methods',
+      zoteroRelevance: 'medium',
       zoteroStatus: 'new',
       annotations: [
         {
@@ -76,6 +77,7 @@ describe('getTemplates', () => {
     expect(output).toMatch(/zoteroProject:\s*\n {2}- "\[\[Project A\]\]"/);
     expect(output).toMatch(/zoteroTopic:\s*\n {2}- "ecosystem"/);
     expect(output).toContain('zoteroNote: "Read for methods"');
+    expect(output).toContain('zoteroRelevance: "medium"');
     expect(output).toContain('zoteroStatus: "new"');
     expect(output).toMatch(/zoteroTags:\s*\n {2}- "\/notags"/);
     expect(output).toContain('Automated Metadata');

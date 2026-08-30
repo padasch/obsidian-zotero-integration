@@ -1,3 +1,3 @@
-- Sanitize rendered YAML frontmatter before writing imported Zotero notes.
-- Clean managed frontmatter values recursively to remove YAML-hostile characters.
-- Quote rendered frontmatter scalars that would otherwise be ambiguous YAML.
+- Add `zoteroRelevance` managed metadata for imported Zotero notes.
+- Add relevance controls to monitor review and safe autoimport settings.
+- Include relevance defaults in templates and new-note frontmatter handling.

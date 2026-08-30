@@ -126,6 +126,9 @@ zoteroTopic:
 {% if zoteroNote -%}
 zoteroNote: "{{ zoteroNote | replace('"', "'") }}"
 {% endif -%}
+{% if zoteroRelevance -%}
+zoteroRelevance: "{{ zoteroRelevance | replace('"', "'") }}"
+{% endif -%}
 {% if zoteroStatus -%}
 zoteroStatus: "{{ zoteroStatus | replace('"', "'") }}"
 {% endif -%}

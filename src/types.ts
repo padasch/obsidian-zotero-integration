@@ -86,11 +86,13 @@ export interface ExportToMarkdownSkip {
 }
 
 export type ZoteroManagedUserStatus = string;
+export type ZoteroManagedUserRelevance = 'no' | 'low' | 'medium' | 'high';
 
 export interface ZoteroManagedUserProperties {
   zoteroProject: string[];
   zoteroTopic: string[];
   zoteroNote: string;
+  zoteroRelevance: ZoteroManagedUserRelevance;
   zoteroSummary?: string;
   zoteroStatus: ZoteroManagedUserStatus;
 }
@@ -179,6 +181,7 @@ export interface ZoteroConnectorSettings {
   zoteroMonitorImportFormat?: string;
   zoteroAutoImportEnabled?: boolean;
   zoteroAutoImportNote?: string;
+  zoteroAutoImportRelevance?: ZoteroManagedUserRelevance;
   zoteroAutoImportStatus?: string;
   zoteroItemTableColumns?: string[];
   zoteroMonitorTableColumns?: string[];

@@ -32,6 +32,7 @@ import {
   DEFAULT_ZOTERO_ITEM_TABLE_COLUMNS,
   normalizeZoteroItemTableColumns,
 } from './ZoteroItemTable.columns';
+import { normalizeZoteroRelevance } from './ZoteroManagedProperties';
 import { ZoteroConnectorSettingsTab } from './settings/settings';
 import {
   CitationFormat,
@@ -123,6 +124,7 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   zoteroMonitorImportFormat: '',
   zoteroAutoImportEnabled: false,
   zoteroAutoImportNote: 'Automatically imported',
+  zoteroAutoImportRelevance: 'no',
   zoteroAutoImportStatus: 'new',
   zoteroItemTableColumns: DEFAULT_ZOTERO_ITEM_TABLE_COLUMNS.slice(),
   zoteroOrphanedProperty: 'zoteroOrphaned',
@@ -503,6 +505,9 @@ export default class ZoteroConnector extends Plugin {
     mergedSettings.zoteroAutoImportStatus =
       mergedSettings.zoteroAutoImportStatus ||
       DEFAULT_SETTINGS.zoteroAutoImportStatus;
+    mergedSettings.zoteroAutoImportRelevance = normalizeZoteroRelevance(
+      mergedSettings.zoteroAutoImportRelevance
+    );
     mergedSettings.zoteroCitekeyLinkLabelMode =
       mergedSettings.zoteroCitekeyLinkLabelMode ||
       DEFAULT_SETTINGS.zoteroCitekeyLinkLabelMode;

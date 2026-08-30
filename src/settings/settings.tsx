@@ -25,6 +25,8 @@ import {
 import {
   ZOTERO_ANNOTATION_COLORS,
   ZOTERO_ANNOTATION_COLOR_HEX,
+  normalizeZoteroRelevance,
+  ZOTERO_RELEVANCE_VALUES,
 } from '../ZoteroManagedProperties';
 import { formatScopeInput, splitScopeInput } from '../ZoteroMonitor.helpers';
 import ZoteroConnector from '../main';
@@ -957,6 +959,31 @@ function SettingsComponent({
               )
             }
           />
+        </SettingItem>
+        <SettingItem
+          name="Autoimport relevance"
+          description="zoteroRelevance assigned to notes created by safe autoimport."
+        >
+          <select
+            className="dropdown"
+            defaultValue={normalizeZoteroRelevance(
+              settings.zoteroAutoImportRelevance
+            )}
+            onChange={(e) =>
+              updateSetting(
+                'zoteroAutoImportRelevance',
+                normalizeZoteroRelevance(
+                  (e.target as HTMLSelectElement).value
+                )
+              )
+            }
+          >
+            {ZOTERO_RELEVANCE_VALUES.map((value) => (
+              <option key={value} value={value}>
+                {value.charAt(0).toLocaleUpperCase() + value.slice(1)}
+              </option>
+            ))}
+          </select>
         </SettingItem>
         <SettingItem
           name="Autoimport note"

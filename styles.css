@@ -733,6 +733,7 @@ h3.zt-settings-section-title {
 }
 
 .zt-monitor-bulk-field input,
+.zt-monitor-bulk-field select,
 .zt-monitor-bulk-field textarea {
   width: 100%;
 }

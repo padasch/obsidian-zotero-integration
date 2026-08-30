@@ -4,7 +4,13 @@ describe('getInvalidPreservedProperties()', () => {
   it('accepts known Zotero properties and current vault properties', () => {
     expect(
       getInvalidPreservedProperties(
-        ['citekey', 'zoteroProject', 'customReviewedBy', 'unknownField'],
+        [
+          'citekey',
+          'zoteroProject',
+          'zoteroRelevance',
+          'customReviewedBy',
+          'unknownField',
+        ],
         ['customReviewedBy']
       )
     ).toEqual(['unknownField']);

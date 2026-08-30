@@ -8,6 +8,7 @@ import { doesEXEExist, getVaultRoot } from '../helpers';
 import {
   applyAnnotatedStatusFromAnnotations,
   createZoteroCitekeyLink,
+  normalizeZoteroRelevance,
   sanitizeFrontmatterString,
   sanitizeFrontmatterValue,
   sanitizeRenderedFrontmatter,
@@ -721,6 +722,9 @@ function withManagedProperties(
     zoteroProject: managedProperties.zoteroProject || [],
     zoteroTopic: managedProperties.zoteroTopic || [],
     zoteroNote: managedProperties.zoteroNote || '',
+    zoteroRelevance: normalizeZoteroRelevance(
+      managedProperties.zoteroRelevance
+    ),
     zoteroStatus: managedProperties.zoteroStatus || 'new',
     ...(managedProperties.zoteroSummary
       ? { zoteroSummary: managedProperties.zoteroSummary }
@@ -755,6 +759,9 @@ async function writeManagedProperties(
     frontmatter.zoteroProject = safeManagedProperties.zoteroProject || [];
     frontmatter.zoteroTopic = safeManagedProperties.zoteroTopic || [];
     frontmatter.zoteroNote = safeManagedProperties.zoteroNote || '';
+    frontmatter.zoteroRelevance = normalizeZoteroRelevance(
+      safeManagedProperties.zoteroRelevance
+    );
     frontmatter.zoteroStatus = safeManagedProperties.zoteroStatus || 'new';
 
     if (safeManagedProperties.zoteroSummary !== undefined) {
