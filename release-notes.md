@@ -1,3 +1,3 @@
-- Make background imports non-interactive by suppressing Zotero and PDF extraction progress modals.
-- Add a background import progress notice and completion summary.
-- Add a review modal for Zotero items skipped during background import.
+- Sanitize rendered YAML frontmatter before writing imported Zotero notes.
+- Clean managed frontmatter values recursively to remove YAML-hostile characters.
+- Quote rendered frontmatter scalars that would otherwise be ambiguous YAML.

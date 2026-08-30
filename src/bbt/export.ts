@@ -8,6 +8,9 @@ import { doesEXEExist, getVaultRoot } from '../helpers';
 import {
   applyAnnotatedStatusFromAnnotations,
   createZoteroCitekeyLink,
+  sanitizeFrontmatterString,
+  sanitizeFrontmatterValue,
+  sanitizeRenderedFrontmatter,
   sortFrontmatterProperties,
 } from '../ZoteroManagedProperties';
 import {
@@ -745,15 +748,17 @@ async function writeManagedProperties(
   managedProperties?: ZoteroManagedUserProperties
 ) {
   if (!managedProperties) return;
+  const safeManagedProperties =
+    sanitizeFrontmatterValue(managedProperties);
 
   await app.fileManager.processFrontMatter(file, (frontmatter) => {
-    frontmatter.zoteroProject = managedProperties.zoteroProject || [];
-    frontmatter.zoteroTopic = managedProperties.zoteroTopic || [];
-    frontmatter.zoteroNote = managedProperties.zoteroNote || '';
-    frontmatter.zoteroStatus = managedProperties.zoteroStatus || 'new';
+    frontmatter.zoteroProject = safeManagedProperties.zoteroProject || [];
+    frontmatter.zoteroTopic = safeManagedProperties.zoteroTopic || [];
+    frontmatter.zoteroNote = safeManagedProperties.zoteroNote || '';
+    frontmatter.zoteroStatus = safeManagedProperties.zoteroStatus || 'new';
 
-    if (managedProperties.zoteroSummary !== undefined) {
-      frontmatter.zoteroSummary = managedProperties.zoteroSummary;
+    if (safeManagedProperties.zoteroSummary !== undefined) {
+      frontmatter.zoteroSummary = safeManagedProperties.zoteroSummary;
     }
 
     sortFrontmatterProperties(frontmatter);
@@ -772,7 +777,8 @@ async function writeZoteroOwnedProperties(
   if (!zoteroCitekeyLink) return;
 
   await app.fileManager.processFrontMatter(file, (frontmatter) => {
-    frontmatter.zoteroCitekeyLink = zoteroCitekeyLink;
+    frontmatter.zoteroCitekeyLink =
+      sanitizeFrontmatterString(zoteroCitekeyLink);
     sortFrontmatterProperties(frontmatter);
   });
 }
@@ -1157,10 +1163,11 @@ export async function exportToMarkdown(
         });
         continue;
       }
+      const safeRendered = sanitizeRenderedFrontmatter(rendered);
 
       if (file) {
         if (params.forceOverwrite) {
-          await app.vault.modify(file, rendered);
+          await app.vault.modify(file, safeRendered);
           await writeZoteroOwnedProperties(file, templateData, settings);
           await writeManagedProperties(file, params.managedProperties);
           await writePreservedProperties(file, data.frontmatter, settings);
@@ -1187,7 +1194,7 @@ export async function exportToMarkdown(
           const shouldOverwrite = await modal.waitForResult();
 
           if (shouldOverwrite) {
-            await app.vault.modify(file, rendered);
+            await app.vault.modify(file, safeRendered);
             await writeZoteroOwnedProperties(file, templateData, settings);
             await writeManagedProperties(file, params.managedProperties);
             await writePreservedProperties(file, data.frontmatter, settings);
@@ -1220,7 +1227,7 @@ export async function exportToMarkdown(
         }
 
         await mkMDDir(markdownPath);
-        const createdFile = await app.vault.create(markdownPath, rendered);
+        const createdFile = await app.vault.create(markdownPath, safeRendered);
         await writeZoteroOwnedProperties(createdFile, templateData, settings);
         await writeManagedProperties(createdFile, params.managedProperties);
         await writeNewNoteDefaults(createdFile, params.managedProperties);

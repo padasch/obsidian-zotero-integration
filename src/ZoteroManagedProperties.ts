@@ -30,9 +30,51 @@ export const ZOTERO_ANNOTATION_COLOR_HEX: Record<AnnotationColor, string> = {
   Gray: '#aaaaaa',
 };
 
+// Intentionally strips control characters that can break YAML frontmatter.
+/* eslint-disable no-control-regex */
+const FRONTMATTER_CONTROL_CHARS =
+  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\ufeff]/g;
+/* eslint-enable no-control-regex */
+const FRONTMATTER_LINEBREAK_CHARS = /[\r\n\t\u0085\u2028\u2029]+/g;
+
 function cleanString(value: unknown): string {
   if (value === null || value === undefined) return '';
   return String(value).trim();
+}
+
+export function sanitizeFrontmatterString(value: unknown): string {
+  return cleanString(value)
+    .replace(/\\/g, '')
+    .replace(FRONTMATTER_LINEBREAK_CHARS, ' ')
+    .replace(FRONTMATTER_CONTROL_CHARS, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object') return false;
+  return Object.getPrototypeOf(value) === Object.prototype;
+}
+
+export function sanitizeFrontmatterValue<T>(value: T): T {
+  if (typeof value === 'string') {
+    return sanitizeFrontmatterString(value) as T;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeFrontmatterValue(entry)) as T;
+  }
+
+  if (isPlainObject(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        sanitizeFrontmatterValue(entry),
+      ])
+    ) as T;
+  }
+
+  return value;
 }
 
 function isEmptyStatus(value: unknown): boolean {
@@ -115,6 +157,109 @@ export function sortFrontmatterProperties(frontmatter: Record<string, any>) {
   for (const key of sortedKeys) {
     frontmatter[key] = sortedValues[key];
   }
+}
+
+function quoteYamlScalar(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function isAlreadyQuotedYamlScalar(value: string): boolean {
+  return (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  );
+}
+
+function unquoteYamlScalar(value: string): string | null {
+  if (!isAlreadyQuotedYamlScalar(value)) return null;
+
+  const inner = value.slice(1, -1);
+  if (value.startsWith("'")) {
+    return inner.replace(/''/g, "'");
+  }
+
+  return inner.replace(/\\"/g, '"');
+}
+
+function isYamlTypedScalar(value: string): boolean {
+  const lower = value.toLocaleLowerCase();
+  return (
+    lower === 'true' ||
+    lower === 'false' ||
+    lower === 'null' ||
+    /^[-+]?\d+(\.\d+)?$/.test(value) ||
+    /^\d{4}-\d{2}-\d{2}(t\d{2}:\d{2}(:\d{2})?)?/i.test(value)
+  );
+}
+
+function isYamlCollectionLiteral(value: string): boolean {
+  return (
+    (value.startsWith('[') && value.endsWith(']')) ||
+    (value.startsWith('{') && value.endsWith('}'))
+  );
+}
+
+function needsYamlQuotes(value: string): boolean {
+  if (!value) return false;
+  if (isAlreadyQuotedYamlScalar(value)) return false;
+  if (isYamlTypedScalar(value)) return false;
+  if (isYamlCollectionLiteral(value)) return false;
+  if (value === '|' || value === '>') return false;
+
+  return (
+    /^[-?:]\s/.test(value) ||
+    /:\s/.test(value) ||
+    /\s#/.test(value) ||
+    /^[#&*!%@`>|'",[\]{},]/.test(value)
+  );
+}
+
+function sanitizeRenderedYamlValue(value: string): string {
+  const unquoted = unquoteYamlScalar(value.trim());
+  if (unquoted !== null) {
+    return quoteYamlScalar(sanitizeFrontmatterString(unquoted));
+  }
+
+  const sanitized = sanitizeFrontmatterString(value);
+  return needsYamlQuotes(sanitized) ? quoteYamlScalar(sanitized) : sanitized;
+}
+
+function sanitizeRenderedFrontmatterLine(line: string): string {
+  if (!line.trim() || /^\s*#/.test(line)) return line;
+
+  const listItemMatch = line.match(/^(\s*-\s+)(.*)$/);
+  if (listItemMatch) {
+    return `${listItemMatch[1]}${sanitizeRenderedYamlValue(listItemMatch[2])}`;
+  }
+
+  const propertyMatch = line.match(/^(\s*[^:#][^:]*:\s*)(.*)$/);
+  if (propertyMatch) {
+    return `${propertyMatch[1]}${sanitizeRenderedYamlValue(propertyMatch[2])}`;
+  }
+
+  const indent = line.match(/^\s*/)?.[0] || '';
+  return `${indent}${sanitizeFrontmatterString(line.slice(indent.length))}`;
+}
+
+export function sanitizeRenderedFrontmatter(markdown: string): string {
+  const lines = markdown.split(/\r?\n/);
+  if (lines[0]?.trim() !== '---') return markdown;
+
+  const closingIndex = lines.findIndex(
+    (line, index) => index > 0 && line.trim() === '---'
+  );
+  if (closingIndex < 0) return markdown;
+
+  const sanitizedFrontmatter = lines
+    .slice(1, closingIndex)
+    .map(sanitizeRenderedFrontmatterLine);
+
+  return [
+    '---',
+    ...sanitizedFrontmatter,
+    '---',
+    ...lines.slice(closingIndex + 1),
+  ].join('\n');
 }
 
 export function getAnnotationCount(templateData: Record<string, any>): number {

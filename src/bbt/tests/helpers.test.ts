@@ -12,6 +12,9 @@ import {
 import {
   applyAnnotatedStatusFromAnnotations,
   createZoteroCitekeyLink,
+  sanitizeFrontmatterString,
+  sanitizeFrontmatterValue,
+  sanitizeRenderedFrontmatter,
   sortFrontmatterProperties,
 } from '../../ZoteroManagedProperties';
 
@@ -285,6 +288,76 @@ describe('sortFrontmatterProperties()', () => {
       'zoteroCitekey',
       'zoteroStatus',
     ]);
+  });
+});
+
+describe('frontmatter sanitization', () => {
+  it('removes YAML-hostile backslashes and control characters from strings', () => {
+    expect(
+      sanitizeFrontmatterString(
+        'Tree response to \\alpha drought\u0000\nwith\tspacing'
+      )
+    ).toBe('Tree response to alpha drought with spacing');
+  });
+
+  it('cleans strings recursively while preserving non-string values', () => {
+    expect(
+      sanitizeFrontmatterValue({
+        zoteroProject: ['[[Project \\alpha]]'],
+        zoteroOpenTasks: true,
+        zoteroYear: 2026,
+      })
+    ).toEqual({
+      zoteroProject: ['[[Project alpha]]'],
+      zoteroOpenTasks: true,
+      zoteroYear: 2026,
+    });
+  });
+
+  it('sanitizes only a rendered YAML frontmatter block', () => {
+    const markdown = [
+      '---',
+      'title: "Photosynthesis \\alpha response"',
+      'zoteroAuthors:',
+      '  - "Smith \\beta"',
+      'zoteroURL: [weblink](https://example.com/paper)',
+      'zoteroYear: 2026',
+      '---',
+      '',
+      'Body keeps \\alpha notation.',
+    ].join('\n');
+
+    const sanitized = sanitizeRenderedFrontmatter(markdown);
+
+    expect(sanitized).toContain("title: 'Photosynthesis alpha response'");
+    expect(sanitized).toContain("  - 'Smith beta'");
+    expect(sanitized).toContain(
+      "zoteroURL: '[weblink](https://example.com/paper)'"
+    );
+    expect(sanitized).toContain('zoteroYear: 2026');
+    expect(sanitized).toContain('Body keeps \\alpha notation.');
+  });
+
+  it('quotes rendered scalar values that would be ambiguous YAML', () => {
+    const markdown = [
+      '---',
+      'title: Carbon balance: drought recovery # field trial',
+      'aliases:',
+      '  - "@smith2026: Carbon balance \\gamma"',
+      'zoteroNote: Follow-up: check methods',
+      '---',
+      'Body',
+    ].join('\n');
+
+    expect(sanitizeRenderedFrontmatter(markdown)).toContain(
+      "title: 'Carbon balance: drought recovery # field trial'"
+    );
+    expect(sanitizeRenderedFrontmatter(markdown)).toContain(
+      "  - '@smith2026: Carbon balance gamma'"
+    );
+    expect(sanitizeRenderedFrontmatter(markdown)).toContain(
+      "zoteroNote: 'Follow-up: check methods'"
+    );
   });
 });
 
