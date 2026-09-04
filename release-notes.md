@@ -1,3 +1,3 @@
-- Add `zoteroCitation` managed frontmatter for imported Zotero notes.
-- Add a `plainCitation` template filter for copy-safe citation text.
-- Include plain-text references in the default import template.
+- Add a batch overwrite prompt when imports would replace multiple existing literature notes.
+- Allow cancelling a conflicting batch import before any existing notes are overwritten.
+- Refresh open Obsidian Bases after Zotero imports and updates so new frontmatter is visible.

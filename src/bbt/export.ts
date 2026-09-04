@@ -2,6 +2,10 @@ import { copyFileSync, existsSync, mkdirSync } from 'fs';
 import { Notice, TFile, htmlToMarkdown, moment, normalizePath } from 'obsidian';
 import path from 'path';
 
+import {
+  BatchOverwriteAction,
+  BatchOverwriteModal,
+} from './BatchOverwriteModal';
 import { ConfirmationModal } from './ConfirmationModal';
 
 import { doesEXEExist, getVaultRoot } from '../helpers';
@@ -51,6 +55,8 @@ import {
   removeStartingSlash,
   wrapAnnotationTemplate,
 } from './template.helpers';
+
+const BATCH_OVERWRITE_SAMPLE_LIMIT = 6;
 
 async function processNote(
   citeKey: CiteKey,
@@ -1142,6 +1148,36 @@ export async function exportToMarkdown(
     }
   }
 
+  let batchOverwriteAction: BatchOverwriteAction = params.forceOverwrite
+    ? 'overwrite-all'
+    : 'ask-each';
+  const conflictingPaths = Array.from(toRender.entries())
+    .filter(([, data]) => !!data.file)
+    .map(([markdownPath]) => markdownPath);
+
+  if (
+    conflictingPaths.length > 1 &&
+    !params.forceOverwrite &&
+    !params.nonInteractive
+  ) {
+    const modal = new BatchOverwriteModal(
+      app,
+      conflictingPaths.length,
+      conflictingPaths.slice(0, BATCH_OVERWRITE_SAMPLE_LIMIT)
+    );
+    modal.open();
+    batchOverwriteAction = await modal.waitForResult();
+
+    if (batchOverwriteAction === 'cancel') {
+      notify(
+        `Import cancelled. ${conflictingPaths.length} existing literature notes were left unchanged.`,
+        7000
+      );
+      await params.onCancel?.();
+      return [];
+    }
+  }
+
   for (const [markdownPath, data] of toRender.entries()) {
     try {
       const { existingAnnotations, file, fileContent, item, lastImportDate } =
@@ -1169,7 +1205,10 @@ export async function exportToMarkdown(
       const safeRendered = sanitizeRenderedFrontmatter(rendered);
 
       if (file) {
-        if (params.forceOverwrite) {
+        if (
+          params.forceOverwrite ||
+          batchOverwriteAction === 'overwrite-all'
+        ) {
           await app.vault.modify(file, safeRendered);
           await writeZoteroOwnedProperties(file, templateData, settings);
           await writeManagedProperties(file, params.managedProperties);

@@ -1220,6 +1220,21 @@ h3.zt-settings-section-title {
   line-height: 1.5;
 }
 
+.confirmation-modal-conflict-list {
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.4;
+  margin: 0 0 1.5rem 0;
+  max-height: 12rem;
+  overflow: auto;
+  padding: 0.75rem 0.75rem 0.75rem 1.5rem;
+  text-align: left;
+  word-break: break-word;
+}
+
 .confirmation-modal-buttons {
   display: flex;
   gap: 0.5rem;

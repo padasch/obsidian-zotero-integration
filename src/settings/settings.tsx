@@ -25,8 +25,8 @@ import {
 import {
   ZOTERO_ANNOTATION_COLORS,
   ZOTERO_ANNOTATION_COLOR_HEX,
-  normalizeZoteroRelevance,
   ZOTERO_RELEVANCE_VALUES,
+  normalizeZoteroRelevance,
 } from '../ZoteroManagedProperties';
 import { formatScopeInput, splitScopeInput } from '../ZoteroMonitor.helpers';
 import ZoteroConnector from '../main';
@@ -293,6 +293,9 @@ function SettingsComponent({
     zoteroSetStatusAnnotatedOnImport,
     setZoteroSetStatusAnnotatedOnImport,
   ] = React.useState(settings.zoteroSetStatusAnnotatedOnImport !== false);
+
+  const [zoteroRefreshBasesAfterImport, setZoteroRefreshBasesAfterImport] =
+    React.useState(settings.zoteroRefreshBasesAfterImport !== false);
 
   const [zoteroAutoImportEnabled, setZoteroAutoImportEnabled] = React.useState(
     !!settings.zoteroAutoImportEnabled
@@ -972,9 +975,7 @@ function SettingsComponent({
             onChange={(e) =>
               updateSetting(
                 'zoteroAutoImportRelevance',
-                normalizeZoteroRelevance(
-                  (e.target as HTMLSelectElement).value
-                )
+                normalizeZoteroRelevance((e.target as HTMLSelectElement).value)
               )
             }
           >
@@ -1001,6 +1002,26 @@ function SettingsComponent({
                 (e.target as HTMLInputElement).value.trim()
               )
             }
+          />
+        </SettingItem>
+        <SettingsSubheading
+          title="Obsidian Bases"
+          description="Refresh open Bases after Zotero writes so imported frontmatter is visible."
+        />
+        <SettingItem
+          name="Refresh open Bases after import"
+          description="Close and reopen open .base views and notes containing embedded Bases after Zotero imports or updates. This helps Obsidian Bases pick up fresh frontmatter."
+        >
+          <div
+            onClick={() => {
+              setZoteroRefreshBasesAfterImport((state) => {
+                updateSetting('zoteroRefreshBasesAfterImport', !state);
+                return !state;
+              });
+            }}
+            className={`checkbox-container${
+              zoteroRefreshBasesAfterImport ? ' is-enabled' : ''
+            }`}
           />
         </SettingItem>
         <SettingsSubheading

@@ -1,26 +1,16 @@
 import { App, Modal, Notice, TFile } from 'obsidian';
 
-import type ZoteroConnector from './main';
 import {
-  CiteKeyExport,
-  DatabaseWithPort,
-  ExportToMarkdownSkip,
-  ZoteroItemTableColumn,
-  ZoteroManagedUserProperties,
-  ZoteroMonitorItem,
-  ZoteroMonitorScope,
-} from './types';
-import {
+  ZOTERO_ITEM_TABLE_COLUMN_BY_KEY,
   getZoteroItemTableCellText,
   getZoteroItemTableChipValues,
   getZoteroItemTableSortValue,
   isZoteroItemTableChipColumn,
   normalizeZoteroItemTableColumns,
-  ZOTERO_ITEM_TABLE_COLUMN_BY_KEY,
 } from './ZoteroItemTable.columns';
 import {
-  normalizeZoteroRelevance,
   ZOTERO_RELEVANCE_VALUES,
+  normalizeZoteroRelevance,
 } from './ZoteroManagedProperties';
 import {
   describeMonitorRecentScope,
@@ -33,20 +23,30 @@ import {
   groupItemsByLibrary,
   normalizeMonitorItem,
 } from './ZoteroMonitor.helpers';
-import { exportToMarkdown } from './bbt/export';
 import { isZoteroRunning } from './bbt/cayw';
 import type { CiteKey } from './bbt/cayw';
+import { exportToMarkdown } from './bbt/export';
 import {
   getAllCiteKeys,
   getCollectionFromCiteKey,
   getItemJSONFromCiteKeys,
 } from './bbt/jsonRPC';
+import type ZoteroConnector from './main';
 import {
   applyScitePropertiesToFrontmatter,
   fetchSciteTallies,
   getNoteDoi,
   normalizeDoi,
 } from './scite';
+import {
+  CiteKeyExport,
+  DatabaseWithPort,
+  ExportToMarkdownSkip,
+  ZoteroItemTableColumn,
+  ZoteroManagedUserProperties,
+  ZoteroMonitorItem,
+  ZoteroMonitorScope,
+} from './types';
 
 const BATCH_SIZE = 50;
 const MONITOR_ITEM_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -89,6 +89,7 @@ type MonitorImportOptions = {
 type MonitorImportResult = {
   paths: string[];
   skipped: ExportToMarkdownSkip[];
+  cancelled?: boolean;
 };
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -144,10 +145,7 @@ function defaultManagedProperties(): ZoteroManagedUserProperties {
   };
 }
 
-function getItemString(
-  item: ZoteroMonitorItem,
-  keys: string[]
-): string {
+function getItemString(item: ZoteroMonitorItem, keys: string[]): string {
   const source = item.item as Record<string, unknown>;
 
   for (const key of keys) {
@@ -195,7 +193,9 @@ function shouldIgnoreRowSelectionClick(target: EventTarget | null): boolean {
 }
 
 function normalizeIdentityValue(value: unknown): string {
-  return String(value || '').trim().toLocaleLowerCase();
+  return String(value || '')
+    .trim()
+    .toLocaleLowerCase();
 }
 
 function normalizeOptionalNumber(value: unknown): number | undefined {
@@ -216,12 +216,7 @@ function frontmatterValues(value: unknown): string[] {
 
   if (typeof value === 'object') {
     const source = value as Record<string, unknown>;
-    return [
-      source.key,
-      source.citekey,
-      source.citationKey,
-      source.itemKey,
-    ]
+    return [source.key, source.citekey, source.citationKey, source.itemKey]
       .map((entry) => String(entry || '').trim())
       .filter(Boolean);
   }
@@ -264,7 +259,9 @@ function getNoteItemKey(frontmatter: Record<string, any>): string {
   ]);
 }
 
-function getNoteLibraryID(frontmatter: Record<string, any>): number | undefined {
+function getNoteLibraryID(
+  frontmatter: Record<string, any>
+): number | undefined {
   return normalizeOptionalNumber(
     firstFrontmatterValue(frontmatter, ['zoteroLibraryID', 'libraryID'])
   );
@@ -302,14 +299,16 @@ function matchesExistingNote(
 
   if (note.itemKey && item.itemKey && sameLibrary) {
     return (
-      normalizeIdentityValue(note.itemKey) === normalizeIdentityValue(item.itemKey)
+      normalizeIdentityValue(note.itemKey) ===
+      normalizeIdentityValue(item.itemKey)
     );
   }
 
   if (note.citekey) {
     return (
       sameLibrary &&
-      normalizeIdentityValue(note.citekey) === normalizeIdentityValue(item.citekey)
+      normalizeIdentityValue(note.citekey) ===
+        normalizeIdentityValue(item.citekey)
     );
   }
 
@@ -370,7 +369,8 @@ function candidateMatchesRequest(
   requested: { citekey: string; libraryID?: number }
 ): boolean {
   if (
-    requested.citekey.toLocaleLowerCase() !== candidate.citekey.toLocaleLowerCase()
+    requested.citekey.toLocaleLowerCase() !==
+    candidate.citekey.toLocaleLowerCase()
   ) {
     return false;
   }
@@ -466,10 +466,7 @@ class ZoteroDirectImportRequestModal extends Modal {
   private statusEl: HTMLDivElement;
   private submitButton: HTMLButtonElement;
 
-  constructor(
-    app: App,
-    private onSubmit: (value: string) => Promise<void>
-  ) {
+  constructor(app: App, private onSubmit: (value: string) => Promise<void>) {
     super(app);
   }
 
@@ -556,7 +553,9 @@ class ZoteroItemImportModal extends Modal {
   private relevanceSelectEl: HTMLSelectElement;
   private statusInputEl: HTMLInputElement;
   private noteInputEl: HTMLTextAreaElement;
-  private quickSelectButtons: { [key in MonitorQuickSelect]: HTMLButtonElement | null } = {
+  private quickSelectButtons: {
+    [key in MonitorQuickSelect]: HTMLButtonElement | null;
+  } = {
     none: null,
     today: null,
     all: null,
@@ -572,7 +571,7 @@ class ZoteroItemImportModal extends Modal {
     private onImport: (
       items: ZoteroMonitorItem[],
       properties: ZoteroManagedUserProperties
-    ) => Promise<string[]>,
+    ) => Promise<MonitorImportResult>,
     private onFinished: () => void,
     initialSelection: MonitorQuickSelect = 'today'
   ) {
@@ -626,8 +625,13 @@ class ZoteroItemImportModal extends Modal {
     });
 
     const quickSelect = toolbar.createDiv('zt-monitor-quick-select');
-    quickSelect.createSpan({ cls: 'zt-monitor-quick-select-label', text: 'Select:' });
-    const quickSelectButtons = quickSelect.createDiv('zt-monitor-quick-select-buttons');
+    quickSelect.createSpan({
+      cls: 'zt-monitor-quick-select-label',
+      text: 'Select:',
+    });
+    const quickSelectButtons = quickSelect.createDiv(
+      'zt-monitor-quick-select-buttons'
+    );
 
     const setQuickSelectMode = (mode: MonitorQuickSelect) => {
       this.applyQuickSelection(mode);
@@ -637,7 +641,9 @@ class ZoteroItemImportModal extends Modal {
       text: 'None',
     });
     this.quickSelectButtons.none.type = 'button';
-    this.quickSelectButtons.none.addEventListener('click', () => setQuickSelectMode('none'));
+    this.quickSelectButtons.none.addEventListener('click', () =>
+      setQuickSelectMode('none')
+    );
 
     this.quickSelectButtons.today = quickSelectButtons.createEl('button', {
       text: 'All today',
@@ -651,7 +657,9 @@ class ZoteroItemImportModal extends Modal {
       text: 'All',
     });
     this.quickSelectButtons.all.type = 'button';
-    this.quickSelectButtons.all.addEventListener('click', () => setQuickSelectMode('all'));
+    this.quickSelectButtons.all.addEventListener('click', () =>
+      setQuickSelectMode('all')
+    );
 
     const actionBar = container.createDiv('zt-monitor-action-bar');
     this.selectionSummaryEl = actionBar.createDiv('zt-monitor-action-summary');
@@ -737,10 +745,15 @@ class ZoteroItemImportModal extends Modal {
     this.setImportingState(true);
 
     try {
-      const createdOrUpdatedPaths = await this.onImport(
+      const result = await this.onImport(
         selectedItems,
         this.getManagedProperties()
       );
+      const createdOrUpdatedPaths = result.paths;
+
+      if (result.cancelled) {
+        return;
+      }
 
       if (!createdOrUpdatedPaths.length) {
         new Notice('No Zotero literature notes were imported.', 5000);
@@ -753,7 +766,9 @@ class ZoteroItemImportModal extends Modal {
       }
 
       const imported = new Set(selectedItems.map((item) => itemIdentity(item)));
-      this.items = this.items.filter((item) => !imported.has(itemIdentity(item)));
+      this.items = this.items.filter(
+        (item) => !imported.has(itemIdentity(item))
+      );
       this.selected.clear();
       this.selectionAnchorKey = null;
       this.resetManagedProperties();
@@ -803,9 +818,15 @@ class ZoteroItemImportModal extends Modal {
       '',
       topicSuggestions
     );
-    this.statusInputEl = this.renderBulkInput(grid, 'Status', 'new', (value) => {
-      this.managedProperties.zoteroStatus = value.trim() || 'new';
-    }, 'new');
+    this.statusInputEl = this.renderBulkInput(
+      grid,
+      'Status',
+      'new',
+      (value) => {
+        this.managedProperties.zoteroStatus = value.trim() || 'new';
+      },
+      'new'
+    );
     this.relevanceSelectEl = this.renderBulkSelect(
       grid,
       'Relevance',
@@ -816,9 +837,14 @@ class ZoteroItemImportModal extends Modal {
       },
       'no'
     );
-    this.noteInputEl = this.renderBulkTextarea(grid, 'Context note', 'Why this paper entered the queue', (value) => {
-      this.managedProperties.zoteroNote = value.trim();
-    });
+    this.noteInputEl = this.renderBulkTextarea(
+      grid,
+      'Context note',
+      'Why this paper entered the queue',
+      (value) => {
+        this.managedProperties.zoteroNote = value.trim();
+      }
+    );
   }
 
   private resetManagedProperties() {
@@ -911,7 +937,8 @@ class ZoteroItemImportModal extends Modal {
     const topics = new Set<string>();
 
     for (const file of this.app.vault.getMarkdownFiles()) {
-      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      const frontmatter =
+        this.app.metadataCache.getFileCache(file)?.frontmatter;
       const value = frontmatter?.zoteroTopic;
       const values = Array.isArray(value) ? value : value ? [value] : [];
 
@@ -944,15 +971,23 @@ class ZoteroItemImportModal extends Modal {
     if (typeof aValue === 'number' && typeof bValue === 'number') {
       if (aValue !== bValue) return aValue - bValue;
     } else {
-      const comparison = String(aValue).localeCompare(String(bValue), undefined, {
-        sensitivity: 'base',
-      });
+      const comparison = String(aValue).localeCompare(
+        String(bValue),
+        undefined,
+        {
+          sensitivity: 'base',
+        }
+      );
       if (comparison !== 0) return comparison;
     }
 
-    return (a.title || a.citekey).localeCompare(b.title || b.citekey, undefined, {
-      sensitivity: 'base',
-    });
+    return (a.title || a.citekey).localeCompare(
+      b.title || b.citekey,
+      undefined,
+      {
+        sensitivity: 'base',
+      }
+    );
   }
 
   private setSort(key: MonitorSortKey) {
@@ -982,7 +1017,9 @@ class ZoteroItemImportModal extends Modal {
       0,
       0
     );
-    const startOfTomorrow = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000);
+    const startOfTomorrow = new Date(
+      startOfToday.getTime() + 24 * 60 * 60 * 1000
+    );
 
     return createdAt >= startOfToday && createdAt < startOfTomorrow;
   }
@@ -1035,10 +1072,7 @@ class ZoteroItemImportModal extends Modal {
 
     for (const item of this.items) {
       const key = itemIdentity(item);
-      if (
-        mode === 'all' ||
-        (mode === 'today' && this.isItemFromToday(item))
-      ) {
+      if (mode === 'all' || (mode === 'today' && this.isItemFromToday(item))) {
         this.selected.add(key);
       }
     }
@@ -1088,7 +1122,11 @@ class ZoteroItemImportModal extends Modal {
     button.toggleClass('is-active', isActive);
     button.setAttribute(
       'aria-sort',
-      isActive ? (this.sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
+      isActive
+        ? this.sortDirection === 'asc'
+          ? 'ascending'
+          : 'descending'
+        : 'none'
     );
     button.addEventListener('click', () => this.setSort(column.key));
     if (isActive) {
@@ -1775,7 +1813,11 @@ export class ZoteroMonitor {
         0
       );
 
-      const updatedPaths = await this.updateExistingNotes(matched, false, false);
+      const updatedPaths = await this.updateExistingNotes(
+        matched,
+        false,
+        false
+      );
       notice.hide();
 
       if (!updatedPaths.length) {
@@ -1901,7 +1943,10 @@ export class ZoteroMonitor {
         return;
       }
 
-      if (!manual && this.plugin.settings.zoteroMonitorAutomaticAction === 'notice') {
+      if (
+        !manual &&
+        this.plugin.settings.zoteroMonitorAutomaticAction === 'notice'
+      ) {
         this.showMissingItemsNotice(missing);
         return;
       }
@@ -1933,11 +1978,13 @@ export class ZoteroMonitor {
         : `from ${recentScopeLabel}`;
 
     notice.noticeEl.empty();
-    notice.noticeEl.createDiv('zt-monitor-notice-message').setText(
-      `${missing.length} new Zotero reference${
-        missing.length === 1 ? '' : 's'
-      } ${windowLabel}.`
-    );
+    notice.noticeEl
+      .createDiv('zt-monitor-notice-message')
+      .setText(
+        `${missing.length} new Zotero reference${
+          missing.length === 1 ? '' : 's'
+        } ${windowLabel}.`
+      );
 
     const actions = notice.noticeEl.createDiv('zt-monitor-notice-actions');
 
@@ -2121,7 +2168,9 @@ export class ZoteroMonitor {
   private async safeAutoImportItems(
     items: ZoteroMonitorItem[]
   ): Promise<MonitorImportResult> {
-    const progressNotice = this.showBackgroundImportProgressNotice(items.length);
+    const progressNotice = this.showBackgroundImportProgressNotice(
+      items.length
+    );
     let result: MonitorImportResult;
 
     try {
@@ -2174,9 +2223,7 @@ export class ZoteroMonitor {
 
     const notice = new Notice('', 0);
     notice.noticeEl.empty();
-    notice.noticeEl
-      .createDiv('zt-monitor-notice-message')
-      .setText(summary);
+    notice.noticeEl.createDiv('zt-monitor-notice-message').setText(summary);
 
     const actions = notice.noticeEl.createDiv('zt-monitor-notice-actions');
     const reviewButton = actions.createEl('button', {
@@ -2202,8 +2249,7 @@ export class ZoteroMonitor {
 
   private getOrphanedProperty(): string {
     return (
-      this.plugin.settings.zoteroOrphanedProperty ||
-      DEFAULT_ORPHANED_PROPERTY
+      this.plugin.settings.zoteroOrphanedProperty || DEFAULT_ORPHANED_PROPERTY
     );
   }
 
@@ -2225,8 +2271,7 @@ export class ZoteroMonitor {
       description,
       filterSummary,
       async (selectedItems, properties) => {
-        const result = await this.importItems(selectedItems, properties);
-        return result.paths;
+        return this.importItems(selectedItems, properties);
       },
       () => {
         this.modalOpen = false;
@@ -2328,6 +2373,8 @@ export class ZoteroMonitor {
       );
       updatedPaths.push(...paths);
     }
+
+    await this.plugin.refreshOpenBaseViews(updatedPaths);
 
     if (openNotesAfterUpdate) {
       await this.plugin.openNotes(updatedPaths);
@@ -2454,7 +2501,10 @@ export class ZoteroMonitor {
     for (const [libraryID, libraryCandidates] of byLibrary.entries()) {
       const candidateByCitekey = new Map<string, CiteKeyExport>();
       for (const candidate of libraryCandidates) {
-        candidateByCitekey.set(candidate.citekey.toLocaleLowerCase(), candidate);
+        candidateByCitekey.set(
+          candidate.citekey.toLocaleLowerCase(),
+          candidate
+        );
       }
 
       for (const batch of chunk(libraryCandidates, BATCH_SIZE)) {
@@ -2545,8 +2595,13 @@ export class ZoteroMonitor {
     const createdOrUpdatedPaths: string[] = [];
     const skipped: ExportToMarkdownSkip[] = [];
     const database = this.getDatabase();
+    let cancelled = false;
 
-    for (const [libraryID, libraryItems] of groupItemsByLibrary(items).entries()) {
+    for (const [libraryID, libraryItems] of groupItemsByLibrary(
+      items
+    ).entries()) {
+      if (cancelled) break;
+
       const paths = await exportToMarkdown(
         {
           settings: this.plugin.settings,
@@ -2558,6 +2613,9 @@ export class ZoteroMonitor {
           onSkip: (skip) => {
             skipped.push(skip);
           },
+          onCancel: () => {
+            cancelled = true;
+          },
         },
         libraryItems.map((item) => ({
           key: item.citekey,
@@ -2567,6 +2625,8 @@ export class ZoteroMonitor {
 
       createdOrUpdatedPaths.push(...paths);
     }
+
+    await this.plugin.refreshOpenBaseViews(createdOrUpdatedPaths);
 
     if (options.openAfterImport !== false) {
       await this.plugin.openNotes(createdOrUpdatedPaths);
@@ -2584,6 +2644,6 @@ export class ZoteroMonitor {
       );
     }
 
-    return { paths: createdOrUpdatedPaths, skipped };
+    return { paths: createdOrUpdatedPaths, skipped, cancelled };
   }
 }

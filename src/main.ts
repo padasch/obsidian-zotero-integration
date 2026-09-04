@@ -18,6 +18,16 @@ import {
   DEFAULT_LITERATURE_REPORT_PROMPT,
 } from './LiteratureEvidenceMap';
 import { openLiteratureEvidenceMapModal } from './LiteratureEvidenceMapModal';
+import {
+  isObsidianBasePath,
+  markdownContainsObsidianBase,
+} from './ObsidianBaseRefresh';
+import {
+  DEFAULT_ZOTERO_ITEM_TABLE_COLUMNS,
+  normalizeZoteroItemTableColumns,
+} from './ZoteroItemTable.columns';
+import { normalizeZoteroRelevance } from './ZoteroManagedProperties';
+import { ZoteroMonitor } from './ZoteroMonitor';
 import { LoadingModal } from './bbt/LoadingModal';
 import { getCAYW } from './bbt/cayw';
 import { exportToMarkdown, renderCiteTemplate } from './bbt/export';
@@ -27,12 +37,6 @@ import {
   downloadAndExtract,
   internalVersion,
 } from './settings/AssetDownloader';
-import { ZoteroMonitor } from './ZoteroMonitor';
-import {
-  DEFAULT_ZOTERO_ITEM_TABLE_COLUMNS,
-  normalizeZoteroItemTableColumns,
-} from './ZoteroItemTable.columns';
-import { normalizeZoteroRelevance } from './ZoteroManagedProperties';
 import { ZoteroConnectorSettingsTab } from './settings/settings';
 import {
   CitationFormat,
@@ -107,6 +111,7 @@ const DEFAULT_SETTINGS: ZoteroConnectorSettings = {
   openNoteAfterImport: false,
   whichNotesToOpenAfterImport: 'first-imported-note',
   zoteroCitekeyLinkLabelMode: 'citekey',
+  zoteroRefreshBasesAfterImport: true,
   zoteroSetStatusAnnotatedOnImport: true,
   zoteroDuplicateCitekeyCheckEnabled: true,
   zoteroPreservedProperties: [],
@@ -163,7 +168,8 @@ async function fixPath() {
 function isLegacyDefaultCitationCommand(format: CitationFormat): boolean {
   return (
     (format.name === 'Citation' && format.format === 'formatted-citation') ||
-    (format.name === 'Bibliography' && format.format === 'formatted-bibliography')
+    (format.name === 'Bibliography' &&
+      format.format === 'formatted-bibliography')
   );
 }
 
@@ -384,13 +390,13 @@ export default class ZoteroConnector extends Plugin {
           database: this.settings.database,
           port: this.settings.port,
         };
-        this.openNotes(
-          await exportToMarkdown({
-            settings: this.settings,
-            database,
-            exportFormat: format,
-          })
-        );
+        const paths = await exportToMarkdown({
+          settings: this.settings,
+          database,
+          exportFormat: format,
+        });
+        await this.refreshOpenBaseViews(paths);
+        await this.openNotes(paths);
       },
     });
   }
@@ -415,7 +421,7 @@ export default class ZoteroConnector extends Plugin {
 
     if (citekey.startsWith('@')) citekey = citekey.substring(1);
 
-    await exportToMarkdown(
+    const paths = await exportToMarkdown(
       {
         settings: this.settings,
         database,
@@ -423,6 +429,79 @@ export default class ZoteroConnector extends Plugin {
       },
       [{ key: citekey, library }]
     );
+    await this.refreshOpenBaseViews(paths);
+  }
+
+  async refreshOpenBaseViews(changedMarkdownPaths: string[] = []) {
+    if (
+      this.settings.zoteroRefreshBasesAfterImport === false ||
+      !changedMarkdownPaths.filter(Boolean).length
+    ) {
+      return;
+    }
+
+    try {
+      const refreshTargets = await this.getOpenBaseRefreshTargets();
+      if (!refreshTargets.length) return;
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const activeLeaf = this.app.workspace.activeLeaf;
+
+      for (const leaf of refreshTargets) {
+        const viewState = leaf.getViewState();
+        const ephemeralState = leaf.getEphemeralState();
+
+        await leaf.setViewState({
+          type: 'empty',
+          state: {},
+        });
+        await leaf.setViewState(viewState);
+        leaf.setEphemeralState(ephemeralState);
+      }
+
+      if (activeLeaf) {
+        this.app.workspace.setActiveLeaf(activeLeaf, { focus: false });
+      }
+    } catch (error) {
+      console.warn(
+        'Unable to refresh open Obsidian Bases after Zotero import.',
+        error
+      );
+    }
+  }
+
+  private async getOpenBaseRefreshTargets(): Promise<WorkspaceLeaf[]> {
+    const leaves: WorkspaceLeaf[] = [];
+    const refreshTargets = new Set<WorkspaceLeaf>();
+
+    this.app.workspace.iterateAllLeaves((leaf) => leaves.push(leaf));
+
+    for (const leaf of leaves) {
+      const file = getLeafFile(leaf);
+      if (!file) continue;
+
+      if (isObsidianBasePath(file.path)) {
+        refreshTargets.add(leaf);
+        continue;
+      }
+
+      if (file.extension !== 'md') continue;
+
+      try {
+        const content = await this.app.vault.cachedRead(file);
+        if (markdownContainsObsidianBase(content)) {
+          refreshTargets.add(leaf);
+        }
+      } catch (error) {
+        console.warn(
+          `Unable to inspect ${file.path} for embedded Bases.`,
+          error
+        );
+      }
+    }
+
+    return Array.from(refreshTargets);
   }
 
   async openNotes(createdOrUpdatedMarkdownFilesPaths: string[]) {
@@ -511,6 +590,8 @@ export default class ZoteroConnector extends Plugin {
     mergedSettings.zoteroCitekeyLinkLabelMode =
       mergedSettings.zoteroCitekeyLinkLabelMode ||
       DEFAULT_SETTINGS.zoteroCitekeyLinkLabelMode;
+    mergedSettings.zoteroRefreshBasesAfterImport =
+      mergedSettings.zoteroRefreshBasesAfterImport !== false;
     mergedSettings.zoteroSetStatusAnnotatedOnImport =
       mergedSettings.zoteroSetStatusAnnotatedOnImport !== false;
     migrateMonitorRecentScope(loadedSettings, mergedSettings);

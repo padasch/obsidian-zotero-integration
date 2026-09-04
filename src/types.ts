@@ -68,7 +68,12 @@ export interface ExportToMarkdownParams {
   nonInteractive?: boolean;
   suppressNotices?: boolean;
   pathOverrides?: Record<string, string>;
-  afterWrite?: (file: any, item: any, markdownPath: string) => void | Promise<void>;
+  afterWrite?: (
+    file: any,
+    item: any,
+    markdownPath: string
+  ) => void | Promise<void>;
+  onCancel?: () => void | Promise<void>;
   onSkip?: (skip: ExportToMarkdownSkip) => void | Promise<void>;
 }
 
@@ -163,6 +168,7 @@ export interface ZoteroConnectorSettings {
   shouldConcat?: boolean;
   whichNotesToOpenAfterImport: NotesToOpenAfterImport;
   zoteroCitekeyLinkLabelMode?: ZoteroCitekeyLinkLabelMode;
+  zoteroRefreshBasesAfterImport?: boolean;
   zoteroSetStatusAnnotatedOnImport?: boolean;
   zoteroDuplicateCitekeyCheckEnabled?: boolean;
   zoteroPreservedProperties?: string[];
