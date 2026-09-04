@@ -41,6 +41,9 @@ aliases:
 citekey: "{{ citationKey or citekey }}"
 zoteroCitekey: "{{ citationKey or citekey }}"
 {% endif -%}
+{% if bibliography -%}
+zoteroCitation: "{{ bibliography | plainCitation | replace('"', "'") }}"
+{% endif -%}
 {% if libraryID -%}
 zoteroLibraryID: {{ libraryID }}
 {% endif -%}
@@ -141,7 +144,12 @@ zoteroSummary: "{{ zoteroSummary | replace('"', "'") }}"
 
 {% if bibliography -%}
 > [!quote] Reference
+>
 > {{ bibliography }}
+>
+> \`\`\`text
+> {{ bibliography | plainCitation }}
+> \`\`\`
 {% endif %}
 {% if abstractNote -%}
 > [!abstract] Abstract

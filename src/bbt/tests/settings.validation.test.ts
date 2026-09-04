@@ -6,6 +6,7 @@ describe('getInvalidPreservedProperties()', () => {
       getInvalidPreservedProperties(
         [
           'citekey',
+          'zoteroCitation',
           'zoteroProject',
           'zoteroRelevance',
           'customReviewedBy',

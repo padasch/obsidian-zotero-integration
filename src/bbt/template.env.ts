@@ -1,6 +1,8 @@
 import nunjucks, { Callback, Extension, Loader, LoaderSource } from 'nunjucks';
 import { moment } from 'obsidian';
 
+import { plainCitation } from '../ZoteroManagedProperties';
+
 (nunjucks.runtime as any).memberLookup = function memberLookup(
   obj: any,
   val: any
@@ -299,6 +301,7 @@ template.addFilter('filterby', filterBy);
 template.addFilter('format', format);
 template.addFilter('markdownLinkLabel', markdownLinkLabel);
 template.addFilter('nl2br', nl2br);
+template.addFilter('plainCitation', plainCitation);
 template.addExtension(PersistExtension.id, new PersistExtension());
 
 export function renderTemplate(

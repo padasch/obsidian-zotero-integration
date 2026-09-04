@@ -7,9 +7,8 @@ import { ConfirmationModal } from './ConfirmationModal';
 import { doesEXEExist, getVaultRoot } from '../helpers';
 import {
   applyAnnotatedStatusFromAnnotations,
-  createZoteroCitekeyLink,
+  applyZoteroOwnedFrontmatterProperties,
   normalizeZoteroRelevance,
-  sanitizeFrontmatterString,
   sanitizeFrontmatterValue,
   sanitizeRenderedFrontmatter,
   sortFrontmatterProperties,
@@ -777,15 +776,12 @@ async function writeZoteroOwnedProperties(
   templateData: Record<string, any>,
   settings: ZoteroConnectorSettings
 ) {
-  const zoteroCitekeyLink = createZoteroCitekeyLink(
-    templateData,
-    settings.zoteroCitekeyLinkLabelMode || 'citekey'
-  );
-  if (!zoteroCitekeyLink) return;
-
   await app.fileManager.processFrontMatter(file, (frontmatter) => {
-    frontmatter.zoteroCitekeyLink =
-      sanitizeFrontmatterString(zoteroCitekeyLink);
+    applyZoteroOwnedFrontmatterProperties(
+      frontmatter,
+      templateData,
+      settings.zoteroCitekeyLinkLabelMode || 'citekey'
+    );
     sortFrontmatterProperties(frontmatter);
   });
 }

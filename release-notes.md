@@ -1,3 +1,3 @@
-- Add `zoteroRelevance` managed metadata for imported Zotero notes.
-- Add relevance controls to monitor review and safe autoimport settings.
-- Include relevance defaults in templates and new-note frontmatter handling.
+- Add `zoteroCitation` managed frontmatter for imported Zotero notes.
+- Add a `plainCitation` template filter for copy-safe citation text.
+- Include plain-text references in the default import template.

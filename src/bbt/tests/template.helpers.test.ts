@@ -40,6 +40,8 @@ describe('getTemplates', () => {
       itemType: 'journalArticle',
       authors: 'Smith, Jane',
       publicationTitle: 'Journal of Examples',
+      bibliography:
+        'Smith, J. _et al._ (2026) `Example Paper`. Available at: [https://doi.org/10.1000/example](https://doi.org/10.1000/example).',
       DOI: '10.1000/example',
       url: 'https://example.com/paper',
       desktopURI: 'zotero://select/library/items/ABC123',
@@ -62,6 +64,9 @@ describe('getTemplates', () => {
     });
 
     expect(output).toContain('citekey: "smith2026example"');
+    expect(output).toContain(
+      'zoteroCitation: "Smith, J. et al. (2026) Example Paper. Available at: https://doi.org/10.1000/example."'
+    );
     expect(output).toContain('zoteroLibraryID: 1');
     expect(output).toContain('zoteroItemKey: "ABC123"');
     expect(output).toContain('zoteroYear: "2026"');
@@ -80,6 +85,12 @@ describe('getTemplates', () => {
     expect(output).toContain('zoteroRelevance: "medium"');
     expect(output).toContain('zoteroStatus: "new"');
     expect(output).toMatch(/zoteroTags:\s*\n {2}- "\/notags"/);
+    expect(output).toContain('> [!quote] Reference');
+    expect(output).toContain('> ```text');
+    expect(output).toContain(
+      '> Smith, J. et al. (2026) Example Paper. Available at: https://doi.org/10.1000/example.'
+    );
+    expect(output).toContain('> ```');
     expect(output).toContain('Automated Metadata');
     expect(output).toContain('## Notes');
     expect(output).toContain('%% begin notes %%');

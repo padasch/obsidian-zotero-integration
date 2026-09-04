@@ -196,6 +196,21 @@ describe('filter#nl2br()', () => {
   });
 });
 
+describe('filter#plainCitation()', () => {
+  it('renders copy-safe citation text in Nunjucks templates', async () => {
+    await expect(
+      renderTemplate(
+        '',
+        '{{ bibliography | plainCitation }}',
+        {
+          bibliography:
+            'Smith, J. _et al._ (2026) [https://doi.org/10/test](https://doi.org/10/test).',
+        }
+      )
+    ).resolves.toBe('Smith, J. et al. (2026) https://doi.org/10/test.');
+  });
+});
+
 describe('class PersistExtension', () => {
   it('parses text and returns content to retain', () => {
     const expected = {

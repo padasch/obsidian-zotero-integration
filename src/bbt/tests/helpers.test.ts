@@ -11,8 +11,11 @@ import {
 } from '../../ZoteroMonitor.helpers';
 import {
   applyAnnotatedStatusFromAnnotations,
+  applyZoteroOwnedFrontmatterProperties,
+  createZoteroCitation,
   createZoteroCitekeyLink,
   normalizeZoteroRelevance,
+  plainCitation,
   sanitizeFrontmatterString,
   sanitizeFrontmatterValue,
   sanitizeRenderedFrontmatter,
@@ -271,6 +274,71 @@ describe('createZoteroCitekeyLink()', () => {
     expect(createZoteroCitekeyLink({ citationKey: 'smith2026' }, 'emoji')).toBe(
       '@smith2026'
     );
+  });
+});
+
+describe('plainCitation()', () => {
+  it('removes Markdown formatting and keeps readable citation text', () => {
+    expect(
+      plainCitation(
+        'McDowell, N.G. _et al._ (2022) `Mechanisms` in *Nature*.'
+      )
+    ).toBe('McDowell, N.G. et al. (2022) Mechanisms in Nature.');
+  });
+
+  it('converts Markdown links to visible labels and normalizes whitespace', () => {
+    expect(
+      plainCitation(
+        'Available at: [https://doi.org/10.1038/test](https://doi.org/10.1038/test).\n\nAccessed today.'
+      )
+    ).toBe(
+      'Available at: https://doi.org/10.1038/test. Accessed today.'
+    );
+  });
+
+  it('falls back to Markdown link targets when labels are empty', () => {
+    expect(plainCitation('Available at: [](https://example.com/paper).')).toBe(
+      'Available at: https://example.com/paper.'
+    );
+  });
+
+  it('strips HTML and decodes common entities', () => {
+    expect(plainCitation('<i>Forest</i>&nbsp;&amp;&nbsp;Drought')).toBe(
+      'Forest & Drought'
+    );
+  });
+
+  it('handles empty citation values', () => {
+    expect(plainCitation(undefined)).toBe('');
+    expect(createZoteroCitation({})).toBe('');
+  });
+
+  it('creates managed Zotero citation values from bibliography data', () => {
+    expect(
+      createZoteroCitation({
+        bibliography:
+          'Schneider, P. _et al._ (2026) [https://doi.org/10/test](https://doi.org/10/test).',
+      })
+    ).toBe('Schneider, P. et al. (2026) https://doi.org/10/test.');
+  });
+
+  it('refreshes managed Zotero-owned frontmatter citation fields', () => {
+    const frontmatter = {
+      zoteroCitation: 'stale',
+      zoteroCitekeyLink: 'stale',
+    };
+
+    applyZoteroOwnedFrontmatterProperties(frontmatter, {
+      citationKey: 'smith2026',
+      bibliography:
+        'Smith, J. _et al._ (2026) [https://doi.org/10/test](https://doi.org/10/test).',
+      pdfZoteroLink: '[PDF](zotero://open-pdf/library/items/ABC123)',
+    });
+
+    expect(frontmatter).toEqual({
+      zoteroCitation: 'Smith, J. et al. (2026) https://doi.org/10/test.',
+      zoteroCitekeyLink: '[@smith2026](zotero://open-pdf/library/items/ABC123)',
+    });
   });
 });
 

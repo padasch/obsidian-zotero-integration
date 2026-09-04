@@ -121,6 +121,62 @@ export function getMarkdownLinkTarget(value: unknown): string {
   return (match ? match[1] : text).trim();
 }
 
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (match, hex) => {
+      const codePoint = parseInt(hex, 16);
+      return codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : match;
+    })
+    .replace(/&#(\d+);/g, (match, code) => {
+      const codePoint = parseInt(code, 10);
+      return codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : match;
+    });
+}
+
+export function plainCitation(value: unknown): string {
+  return decodeHtmlEntities(cleanString(value))
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/(div|p|li|tr|h[1-6])>/gi, ' ')
+    .replace(/!\[([^\]]*)]\(([^)]*)\)/g, (_, label, target) =>
+      cleanString(label) || cleanString(target)
+    )
+    .replace(/\[([^\]]*)]\(([^)]*)\)/g, (_, label, target) =>
+      cleanString(label) || cleanString(target)
+    )
+    .replace(/<[^>]+>/g, '')
+    .replace(/\\([\\`*_{}[\]()#+\-.!|>])/g, '$1')
+    .replace(/[`*_]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function createZoteroCitation(item: Record<string, any>): string {
+  return plainCitation(item.bibliography || item.zoteroCitation);
+}
+
+export function applyZoteroOwnedFrontmatterProperties(
+  frontmatter: Record<string, any>,
+  item: Record<string, any>,
+  labelMode: 'citekey' | 'emoji' = 'citekey'
+) {
+  const zoteroCitekeyLink = createZoteroCitekeyLink(item, labelMode);
+
+  if (zoteroCitekeyLink) {
+    frontmatter.zoteroCitekeyLink =
+      sanitizeFrontmatterString(zoteroCitekeyLink);
+  }
+
+  frontmatter.zoteroCitation = sanitizeFrontmatterString(
+    createZoteroCitation(item)
+  );
+}
+
 function getPdfReaderTarget(item: Record<string, any>): string {
   const direct =
     getMarkdownLinkTarget(item.pdfZoteroLink) ||
