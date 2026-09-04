@@ -1,3 +1,3 @@
-- Add a batch overwrite prompt when imports would replace multiple existing literature notes.
-- Allow cancelling a conflicting batch import before any existing notes are overwritten.
-- Refresh open Obsidian Bases after Zotero imports and updates so new frontmatter is visible.
+- Preflight existing-note and duplicate-citekey conflicts before batch imports fetch full Zotero metadata.
+- Add progress details for multi-item Zotero imports while metadata and annotations are processed.
+- Keep skipped or unconfirmed notes out of the render/write queue.

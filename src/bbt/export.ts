@@ -3,13 +3,6 @@ import { Notice, TFile, htmlToMarkdown, moment, normalizePath } from 'obsidian';
 import path from 'path';
 
 import {
-  BatchOverwriteAction,
-  BatchOverwriteModal,
-} from './BatchOverwriteModal';
-import { ConfirmationModal } from './ConfirmationModal';
-
-import { doesEXEExist, getVaultRoot } from '../helpers';
-import {
   applyAnnotatedStatusFromAnnotations,
   applyZoteroOwnedFrontmatterProperties,
   normalizeZoteroRelevance,
@@ -17,22 +10,29 @@ import {
   sanitizeRenderedFrontmatter,
   sortFrontmatterProperties,
 } from '../ZoteroManagedProperties';
+import { doesEXEExist, getVaultRoot } from '../helpers';
+import { getItemDoi, writeScitePropertiesForFile } from '../scite';
 import {
   DatabaseWithPort,
-  ExportToMarkdownSkip,
   ExportToMarkdownParams,
+  ExportToMarkdownSkip,
   RenderCiteTemplateParams,
   ZoteroConnectorSettings,
   ZoteroManagedUserProperties,
 } from '../types';
-import { getItemDoi, writeScitePropertiesForFile } from '../scite';
+import {
+  BatchOverwriteAction,
+  BatchOverwriteModal,
+} from './BatchOverwriteModal';
+import { ConfirmationModal } from './ConfirmationModal';
+import { LoadingModal } from './LoadingModal';
 import { applyBasicTemplates } from './basicTemplates/applyBasicTemplates';
 import { CiteKey, getCiteKeyFromAny, getCiteKeys } from './cayw';
 import { processZoteroAnnotationNotes } from './exportNotes';
 import { extractAnnotations } from './extractAnnotations';
 import {
-  getDuplicateCitekeyCandidatePath,
   getColorCategory,
+  getDuplicateCitekeyCandidatePath,
   getLocalURI,
   mkMDDir,
   sanitizeFilePath,
@@ -108,6 +108,45 @@ function processAttachment(attachment: any) {
   }
 }
 
+function normalizeItemForTemplate(item: any, importDate: moment.Moment) {
+  const citekey = getCiteKeyFromAny(item);
+  item.importDate = importDate;
+  // legacy
+  item.exportDate = importDate;
+  item.desktopURI =
+    item.select || getLocalURI('select', item.uri, item.itemKey);
+
+  if (item.accessDate) {
+    item.accessDate = moment(item.accessDate);
+  }
+
+  if (item.dateAdded) {
+    item.dateAdded = moment(item.dateAdded);
+  }
+
+  if (item.dateModified) {
+    item.dateModified = moment(item.dateModified);
+  }
+
+  if (citekey) {
+    if (!item.citekey) {
+      item.citekey = citekey.key;
+    }
+
+    if (!item.citationKey) {
+      item.citationKey = citekey.key;
+    }
+  }
+
+  if (item.attachments) {
+    for (const attachment of item.attachments) {
+      processAttachment(attachment);
+    }
+  }
+
+  return citekey;
+}
+
 function processAnnotation(
   annotation: any,
   attachment: any,
@@ -160,7 +199,7 @@ function convertNativeAnnotation(
 
   if (annotation.annotationPosition) {
     if (annotation.annotationPosition.pageIndex) {
-      annot.page = annotation.annotationPosition.pageIndex + 1
+      annot.page = annotation.annotationPosition.pageIndex + 1;
     }
 
     if (annotation.annotationPosition.rects) {
@@ -298,34 +337,9 @@ async function processItem(
   skipRelations?: boolean,
   silent?: boolean
 ) {
-  const citekey = getCiteKeyFromAny(item);
-  item.importDate = importDate;
-  // legacy
-  item.exportDate = importDate;
-  item.desktopURI =
-    item.select || getLocalURI('select', item.uri, item.itemKey);
-
-  if (item.accessDate) {
-    item.accessDate = moment(item.accessDate);
-  }
-
-  if (item.dateAdded) {
-    item.dateAdded = moment(item.dateAdded);
-  }
-
-  if (item.dateModified) {
-    item.dateModified = moment(item.dateModified);
-  }
+  const citekey = normalizeItemForTemplate(item, importDate);
 
   if (citekey) {
-    if (!item.citekey) {
-      item.citekey = citekey.key;
-    }
-
-    if (!item.citationKey) {
-      item.citationKey = citekey.key;
-    }
-
     try {
       item.date = await getIssueDateFromCiteKey(citekey, database, silent);
     } catch {
@@ -358,12 +372,6 @@ async function processItem(
   if (item.notes) {
     for (const note of item.notes) {
       await processNote(citekey, note, importDate, database, cslStyle, silent);
-    }
-  }
-
-  if (item.attachments) {
-    for (const attachment of item.attachments) {
-      processAttachment(attachment);
     }
   }
 
@@ -631,9 +639,7 @@ async function getTemplateData(
   item: any,
   lastImportDate: moment.Moment
 ) {
-  const firstAnnots = item.attachments.find(
-    (a: any) => a.annotations?.length
-  );
+  const firstAnnots = item.attachments.find((a: any) => a.annotations?.length);
 
   item.annotations = firstAnnots?.annotations ?? [];
   item.lastImportDate = lastImportDate;
@@ -757,8 +763,7 @@ async function writeManagedProperties(
   managedProperties?: ZoteroManagedUserProperties
 ) {
   if (!managedProperties) return;
-  const safeManagedProperties =
-    sanitizeFrontmatterValue(managedProperties);
+  const safeManagedProperties = sanitizeFrontmatterValue(managedProperties);
 
   await app.fileManager.processFrontMatter(file, (frontmatter) => {
     frontmatter.zoteroProject = safeManagedProperties.zoteroProject || [];
@@ -827,7 +832,9 @@ async function writePreservedProperties(
   await app.fileManager.processFrontMatter(file, (frontmatter) => {
     for (const property of settings.zoteroPreservedProperties) {
       if (!property) continue;
-      if (!Object.prototype.hasOwnProperty.call(existingFrontmatter, property)) {
+      if (
+        !Object.prototype.hasOwnProperty.call(existingFrontmatter, property)
+      ) {
         continue;
       }
 
@@ -875,9 +882,7 @@ function getDuplicateCitekeyNoteSkip(
 
   if (!duplicateCandidatePath) return null;
 
-  const duplicateFile = app.vault.getAbstractFileByPath(
-    duplicateCandidatePath
-  );
+  const duplicateFile = app.vault.getAbstractFileByPath(duplicateCandidatePath);
   if (!(duplicateFile instanceof TFile)) return null;
 
   const baseCitekey = citekey.slice(0, -1);
@@ -909,6 +914,63 @@ async function confirmNoDuplicateCitekeyNote(
   return modal.waitForResult();
 }
 
+async function confirmExistingMarkdownOverwrite(
+  markdownPath: string
+): Promise<boolean> {
+  const modal = new ConfirmationModal(
+    app,
+    'Literature Note Already Exists',
+    `The literature note "${markdownPath}" has been created before. Are you sure you want to overwrite it?`
+  );
+  modal.open();
+
+  return modal.waitForResult();
+}
+
+function shortenProgressLabel(value: string): string {
+  const trimmed = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (trimmed.length <= 72) return trimmed;
+
+  return `${trimmed.slice(0, 69)}...`;
+}
+
+function getProgressItemLabel(item: any, fallback = 'Zotero item'): string {
+  return shortenProgressLabel(
+    getItemCitekey(item) || item?.title || item?.itemKey || fallback
+  );
+}
+
+function createBatchImportProgressModal(
+  itemCount: number,
+  silent: boolean
+): LoadingModal | null {
+  if (silent || itemCount <= 1) return null;
+
+  const modal = new LoadingModal(app, 'Preparing Zotero import...');
+  modal.setProgress(0, itemCount);
+  modal.open();
+  return modal;
+}
+
+function updateBatchImportProgress(
+  modal: LoadingModal | null,
+  message: string,
+  itemIndex: number,
+  itemCount: number,
+  item?: any
+) {
+  if (!modal) return;
+
+  const clampedIndex = Math.min(Math.max(itemIndex, 0), itemCount);
+  const detail = item
+    ? `${clampedIndex}/${itemCount}: ${getProgressItemLabel(item)}`
+    : `${clampedIndex}/${itemCount}`;
+  modal.setMessage(message, detail);
+  modal.setProgress(clampedIndex, itemCount);
+}
+
 export async function exportToMarkdown(
   params: ExportToMarkdownParams,
   explicitCiteKeys?: CiteKey[]
@@ -930,6 +992,7 @@ export async function exportToMarkdown(
     : await getCiteKeys(database);
   if (!citeKeys.length) return [];
 
+  const fetchSilent = silent || citeKeys.length > 1;
   const libraryID = citeKeys[0].library;
   let itemData: any;
   try {
@@ -937,28 +1000,19 @@ export async function exportToMarkdown(
       citeKeys,
       database,
       libraryID,
-      silent
+      fetchSilent
     );
   } catch (e) {
     return [];
   }
+
+  if (!Array.isArray(itemData) || !itemData.length) return [];
 
   // Variable to store the paths of the markdown files that will be created on import.
   // This is an array of an interface defined by a citekey and a path.
   // We first store the citekey in the order of the retrieved item data to save the order input by the user.
   // Further down below, when the Markdown file path has been sanitized, we associate the path to the key.
   const createdOrUpdatedMarkdownFiles: string[] = [];
-
-  for (const item of itemData) {
-    await processItem(
-      item,
-      importDate,
-      database,
-      exportFormat.cslStyle,
-      false,
-      silent
-    );
-  }
 
   const vaultRoot = getVaultRoot();
   const toRender: Map<
@@ -1004,7 +1058,10 @@ export async function exportToMarkdown(
   };
 
   const getMarkdownPath = async (pathTemplateData: any) => {
-    const pathOverride = getItemPathOverride(pathTemplateData, params.pathOverrides);
+    const pathOverride = getItemPathOverride(
+      pathTemplateData,
+      params.pathOverrides
+    );
     if (pathOverride) {
       return normalizePath(pathOverride);
     }
@@ -1025,10 +1082,48 @@ export async function exportToMarkdown(
     );
   };
 
-  for (let i = 0, len = itemData.length; i < len; i++) {
-    const item = itemData[i];
-    const attachments = item.attachments as any[];
-    const attachmentData = await getAttachmentData(item, database, silent);
+  const skippedPaths = new Set<string>();
+  const confirmedOverwritePaths = new Set<string>();
+  const preflightPathByRenderKey = new Map<string, string>();
+  const preflightPathsByItem = new Map<any, Set<string>>();
+  const preflightItemByPath = new Map<string, any>();
+  const getRenderKey = (item: any, attachment?: any) =>
+    [
+      getItemCitekey(item) || item?.itemKey || item?.key || '',
+      attachment?.path || attachment?.itemKey || attachment?.key || '__item__',
+    ].join('\u0000');
+  const recordPreflightPath = (
+    item: any,
+    attachment: any | undefined,
+    markdownPath: string
+  ) => {
+    preflightPathByRenderKey.set(getRenderKey(item, attachment), markdownPath);
+
+    const paths = preflightPathsByItem.get(item) || new Set<string>();
+    paths.add(markdownPath);
+    preflightPathsByItem.set(item, paths);
+
+    if (!preflightItemByPath.has(markdownPath)) {
+      preflightItemByPath.set(markdownPath, item);
+    }
+  };
+  const getPreflightMarkdownPath = async (
+    item: any,
+    attachment: any | undefined,
+    pathTemplateData: any
+  ) => {
+    const key = getRenderKey(item, attachment);
+    const preflightPath = preflightPathByRenderKey.get(key);
+    if (preflightPath) return preflightPath;
+
+    const markdownPath = await getMarkdownPath(pathTemplateData);
+    recordPreflightPath(item, attachment, markdownPath);
+    return markdownPath;
+  };
+
+  for (const item of itemData) {
+    normalizeItemForTemplate(item, importDate);
+    const attachments = (item.attachments || []) as any[];
 
     if (!attachments.length) {
       const pathTemplateData = await applyBasicTemplates(sourcePath, {
@@ -1036,149 +1131,290 @@ export async function exportToMarkdown(
         ...item,
       });
       const markdownPath = await getMarkdownPath(pathTemplateData);
-
-      await queueRender(markdownPath, item);
+      recordPreflightPath(item, undefined, markdownPath);
       continue;
     }
 
-    for (let j = 0, jLen = attachments.length; j < jLen; j++) {
-      const attachment = attachments[j];
-      const attachmentPath = attachment.path;
-      const isPDF = attachmentPath?.endsWith('.pdf');
-
+    for (const attachment of attachments) {
       const pathTemplateData = await applyBasicTemplates(sourcePath, {
         annotations: [],
         ...attachment,
         ...item,
       });
-
       const markdownPath = await getMarkdownPath(pathTemplateData);
-
-      const rawImageRelativePath = exportFormat.imageOutputPathTemplate
-        ? normalizePath(
-            sanitizeFilePath(
-              removeStartingSlash(
-                await renderTemplate(
-                  sourcePath,
-                  exportFormat.imageOutputPathTemplate,
-                  pathTemplateData
-                )
-              )
-            )
-          )
-        : '';
-      const imageRelativePath = resolveImageRelativePathForNote(
-        rawImageRelativePath,
-        markdownPath
-      );
-
-      const imageOutputPath = path.resolve(vaultRoot, imageRelativePath);
-
-      const imageBaseName = exportFormat.imageBaseNameTemplate
-        ? sanitizeFilePath(
-            removeStartingSlash(
-              await renderTemplate(
-                sourcePath,
-                exportFormat.imageBaseNameTemplate,
-                pathTemplateData
-              )
-            )
-          )
-        : 'image';
-
-      let annots: any[] = [];
-
-      attachmentData[attachmentPath]?.annotations?.forEach((annot: any) => {
-        annots.push(
-          convertNativeAnnotation(
-            annot,
-            attachment,
-            imageOutputPath,
-            imageRelativePath,
-            imageBaseName,
-            true
-          )
-        );
-      });
-
-      if (annots.length && settings.shouldConcat) {
-        annots = concatAnnotations(annots);
-      }
-
-      if (isPDF && canExtract) {
-        try {
-          const res = await extractAnnotations(
-            attachmentPath,
-            {
-              imageBaseName: imageBaseName,
-              imageDPI: settings.pdfExportImageDPI,
-              imageFormat: settings.pdfExportImageFormat,
-              imageOutputPath: imageOutputPath,
-              imageQuality: settings.pdfExportImageQuality,
-              attemptOCR: settings.pdfExportImageOCR,
-              ocrLang: settings.pdfExportImageOCRLang,
-              tesseractPath: settings.pdfExportImageTesseractPath,
-              tessDataDir: settings.pdfExportImageTessDataDir,
-              silent,
-            },
-            settings.exeOverridePath
-          );
-
-          let extracted = JSON.parse(res);
-
-          for (const e of extracted) {
-            processAnnotation(e, attachment, imageRelativePath);
-          }
-
-          if (settings.shouldConcat && extracted.length) {
-            extracted = concatAnnotations(extracted);
-          }
-
-          annots.push(...extracted);
-        } catch (e) {
-          //
-        }
-      }
-
-      if (annots.length) {
-        attachment.annotations = annots;
-      }
-
-      await queueRender(markdownPath, item);
+      recordPreflightPath(item, attachment, markdownPath);
     }
   }
 
   let batchOverwriteAction: BatchOverwriteAction = params.forceOverwrite
     ? 'overwrite-all'
     : 'ask-each';
-  const conflictingPaths = Array.from(toRender.entries())
-    .filter(([, data]) => !!data.file)
-    .map(([markdownPath]) => markdownPath);
+  const conflictingPaths = Array.from(preflightItemByPath.keys()).filter(
+    (markdownPath) =>
+      app.vault.getAbstractFileByPath(markdownPath) instanceof TFile
+  );
 
-  if (
-    conflictingPaths.length > 1 &&
-    !params.forceOverwrite &&
-    !params.nonInteractive
-  ) {
-    const modal = new BatchOverwriteModal(
-      app,
-      conflictingPaths.length,
-      conflictingPaths.slice(0, BATCH_OVERWRITE_SAMPLE_LIMIT)
-    );
-    modal.open();
-    batchOverwriteAction = await modal.waitForResult();
-
-    if (batchOverwriteAction === 'cancel') {
-      notify(
-        `Import cancelled. ${conflictingPaths.length} existing literature notes were left unchanged.`,
-        7000
+  if (params.nonInteractive) {
+    for (const markdownPath of conflictingPaths) {
+      skippedPaths.add(markdownPath);
+      await reportSkip({
+        reason: 'existing-file',
+        markdownPath,
+        citekey: getItemCitekey(preflightItemByPath.get(markdownPath)),
+        message: `A literature note already exists at "${markdownPath}".`,
+      });
+    }
+  } else if (!params.forceOverwrite) {
+    if (conflictingPaths.length > 1) {
+      const modal = new BatchOverwriteModal(
+        app,
+        conflictingPaths.length,
+        conflictingPaths.slice(0, BATCH_OVERWRITE_SAMPLE_LIMIT)
       );
-      await params.onCancel?.();
-      return [];
+      modal.open();
+      batchOverwriteAction = await modal.waitForResult();
+
+      if (batchOverwriteAction === 'cancel') {
+        notify(
+          `Import cancelled. ${conflictingPaths.length} existing literature notes were left unchanged.`,
+          7000
+        );
+        await params.onCancel?.();
+        return [];
+      }
+    }
+
+    if (batchOverwriteAction === 'ask-each' && conflictingPaths.length) {
+      for (const markdownPath of conflictingPaths) {
+        const shouldOverwrite = await confirmExistingMarkdownOverwrite(
+          markdownPath
+        );
+
+        if (shouldOverwrite) {
+          confirmedOverwritePaths.add(markdownPath);
+        } else {
+          skippedPaths.add(markdownPath);
+        }
+      }
     }
   }
 
+  for (const [markdownPath, item] of preflightItemByPath.entries()) {
+    if (skippedPaths.has(markdownPath)) continue;
+    if (app.vault.getAbstractFileByPath(markdownPath) instanceof TFile) {
+      continue;
+    }
+
+    const duplicateSkip = getDuplicateCitekeyNoteSkip(
+      markdownPath,
+      item,
+      settings
+    );
+    if (!duplicateSkip) continue;
+
+    if (params.nonInteractive) {
+      skippedPaths.add(markdownPath);
+      await reportSkip(duplicateSkip);
+      continue;
+    }
+
+    const shouldCreate = await confirmNoDuplicateCitekeyNote(
+      markdownPath,
+      item,
+      settings
+    );
+    if (!shouldCreate) {
+      skippedPaths.add(markdownPath);
+      notify(
+        `Skipped possible duplicate Zotero literature note "${markdownPath}".`,
+        7000
+      );
+    }
+  }
+
+  const importableItems = itemData.filter((item: any) =>
+    Array.from(preflightPathsByItem.get(item) || []).some(
+      (markdownPath) => !skippedPaths.has(markdownPath)
+    )
+  );
+  if (!importableItems.length) return [];
+
+  const progressModal = createBatchImportProgressModal(
+    importableItems.length,
+    silent
+  );
+  const requestSilent = silent || !!progressModal;
+
+  try {
+    for (let i = 0, len = importableItems.length; i < len; i++) {
+      const item = importableItems[i];
+      updateBatchImportProgress(
+        progressModal,
+        'Fetching Zotero metadata...',
+        i + 1,
+        len,
+        item
+      );
+      await processItem(
+        item,
+        importDate,
+        database,
+        exportFormat.cslStyle,
+        false,
+        requestSilent
+      );
+    }
+
+    for (let i = 0, len = importableItems.length; i < len; i++) {
+      const item = importableItems[i];
+      updateBatchImportProgress(
+        progressModal,
+        'Extracting annotations...',
+        i + 1,
+        len,
+        item
+      );
+      const attachments = (item.attachments || []) as any[];
+      const attachmentData = await getAttachmentData(
+        item,
+        database,
+        requestSilent
+      );
+
+      if (!attachments.length) {
+        const pathTemplateData = await applyBasicTemplates(sourcePath, {
+          annotations: [],
+          ...item,
+        });
+        const markdownPath = await getPreflightMarkdownPath(
+          item,
+          undefined,
+          pathTemplateData
+        );
+
+        if (skippedPaths.has(markdownPath)) continue;
+        await queueRender(markdownPath, item);
+        continue;
+      }
+
+      for (let j = 0, jLen = attachments.length; j < jLen; j++) {
+        const attachment = attachments[j];
+        const attachmentPath = attachment.path;
+        const isPDF = attachmentPath?.endsWith('.pdf');
+
+        const pathTemplateData = await applyBasicTemplates(sourcePath, {
+          annotations: [],
+          ...attachment,
+          ...item,
+        });
+
+        const markdownPath = await getPreflightMarkdownPath(
+          item,
+          attachment,
+          pathTemplateData
+        );
+        if (skippedPaths.has(markdownPath)) continue;
+
+        const rawImageRelativePath = exportFormat.imageOutputPathTemplate
+          ? normalizePath(
+              sanitizeFilePath(
+                removeStartingSlash(
+                  await renderTemplate(
+                    sourcePath,
+                    exportFormat.imageOutputPathTemplate,
+                    pathTemplateData
+                  )
+                )
+              )
+            )
+          : '';
+        const imageRelativePath = resolveImageRelativePathForNote(
+          rawImageRelativePath,
+          markdownPath
+        );
+
+        const imageOutputPath = path.resolve(vaultRoot, imageRelativePath);
+
+        const imageBaseName = exportFormat.imageBaseNameTemplate
+          ? sanitizeFilePath(
+              removeStartingSlash(
+                await renderTemplate(
+                  sourcePath,
+                  exportFormat.imageBaseNameTemplate,
+                  pathTemplateData
+                )
+              )
+            )
+          : 'image';
+
+        let annots: any[] = [];
+
+        attachmentData[attachmentPath]?.annotations?.forEach((annot: any) => {
+          annots.push(
+            convertNativeAnnotation(
+              annot,
+              attachment,
+              imageOutputPath,
+              imageRelativePath,
+              imageBaseName,
+              true
+            )
+          );
+        });
+
+        if (annots.length && settings.shouldConcat) {
+          annots = concatAnnotations(annots);
+        }
+
+        if (isPDF && canExtract) {
+          try {
+            const res = await extractAnnotations(
+              attachmentPath,
+              {
+                imageBaseName: imageBaseName,
+                imageDPI: settings.pdfExportImageDPI,
+                imageFormat: settings.pdfExportImageFormat,
+                imageOutputPath: imageOutputPath,
+                imageQuality: settings.pdfExportImageQuality,
+                attemptOCR: settings.pdfExportImageOCR,
+                ocrLang: settings.pdfExportImageOCRLang,
+                tesseractPath: settings.pdfExportImageTesseractPath,
+                tessDataDir: settings.pdfExportImageTessDataDir,
+                silent: requestSilent,
+              },
+              settings.exeOverridePath
+            );
+
+            let extracted = JSON.parse(res);
+
+            for (const e of extracted) {
+              processAnnotation(e, attachment, imageRelativePath);
+            }
+
+            if (settings.shouldConcat && extracted.length) {
+              extracted = concatAnnotations(extracted);
+            }
+
+            annots.push(...extracted);
+          } catch (e) {
+            //
+          }
+        }
+
+        if (annots.length) {
+          attachment.annotations = annots;
+        }
+
+        await queueRender(markdownPath, item);
+      }
+    }
+  } finally {
+    progressModal?.close();
+  }
+
   for (const [markdownPath, data] of toRender.entries()) {
+    if (skippedPaths.has(markdownPath)) continue;
+
     try {
       const { existingAnnotations, file, fileContent, item, lastImportDate } =
         data;
@@ -1207,7 +1443,8 @@ export async function exportToMarkdown(
       if (file) {
         if (
           params.forceOverwrite ||
-          batchOverwriteAction === 'overwrite-all'
+          batchOverwriteAction === 'overwrite-all' ||
+          confirmedOverwritePaths.has(markdownPath)
         ) {
           await app.vault.modify(file, safeRendered);
           await writeZoteroOwnedProperties(file, templateData, settings);
@@ -1225,55 +1462,28 @@ export async function exportToMarkdown(
             message: `A literature note already exists at "${markdownPath}".`,
           });
         } else {
-          // Show confirmation modal before overwriting existing file.
-          const modal = new ConfirmationModal(
-            app,
-            'Literature Note Already Exists',
-            `The literature note "${markdownPath}" has been created before. Are you sure you want to overwrite it?`
-          );
-          modal.open();
-
-          const shouldOverwrite = await modal.waitForResult();
-
-          if (shouldOverwrite) {
-            await app.vault.modify(file, safeRendered);
-            await writeZoteroOwnedProperties(file, templateData, settings);
-            await writeManagedProperties(file, params.managedProperties);
-            await writePreservedProperties(file, data.frontmatter, settings);
-            await writeAnnotationStatusProperty(file, templateData, settings);
-            await refreshSciteMetadataOnImport(file, item, settings);
-            await params.afterWrite?.(file, item, markdownPath);
-            createdOrUpdatedMarkdownFiles.push(markdownPath);
-          }
-        }
-      } else {
-        if (params.nonInteractive) {
-          const skip = getDuplicateCitekeyNoteSkip(markdownPath, item, settings);
-          if (skip) {
-            await reportSkip(skip);
-            continue;
-          }
-        }
-
-        const shouldCreate = await confirmNoDuplicateCitekeyNote(
-          markdownPath,
-          item,
-          settings
-        );
-        if (!shouldCreate) {
+          await reportSkip({
+            reason: 'existing-file',
+            markdownPath,
+            citekey: getItemCitekey(item),
+            message: `A literature note exists at "${markdownPath}" but was not confirmed during the overwrite preflight.`,
+          });
           notify(
-            `Skipped possible duplicate Zotero literature note "${markdownPath}".`,
+            `Skipped existing literature note "${markdownPath}" because overwrite was not confirmed before import.`,
             7000
           );
-          continue;
         }
-
+      } else {
         await mkMDDir(markdownPath);
         const createdFile = await app.vault.create(markdownPath, safeRendered);
         await writeZoteroOwnedProperties(createdFile, templateData, settings);
         await writeManagedProperties(createdFile, params.managedProperties);
         await writeNewNoteDefaults(createdFile, params.managedProperties);
-        await writeAnnotationStatusProperty(createdFile, templateData, settings);
+        await writeAnnotationStatusProperty(
+          createdFile,
+          templateData,
+          settings
+        );
         await refreshSciteMetadataOnImport(createdFile, item, settings);
         await params.afterWrite?.(createdFile, item, markdownPath);
         createdOrUpdatedMarkdownFiles.push(markdownPath);
